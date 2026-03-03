@@ -1,0 +1,346 @@
+---
+title: 'LoginServer'
+description: 'Authentication server that handles client login and GameServer registration'
+---
+
+The `LoginServer` class is the main entry point for the authentication server, managing client connections, account validation, and GameServer registration.
+
+**Source:** `org.l2jmobius.loginserver.LoginServer`  
+**Location:** `java/org/l2jmobius/loginserver/LoginServer.java:47`
+
+## Overview
+
+LoginServer is a singleton service that:
+- Accepts client connections on port **2106**
+- Validates account credentials against the database
+- Manages GameServer registrations on port **9014**
+- Enforces flood protection and security policies
+- Handles banned accounts and IP addresses
+
+## Class Structure
+
+```java
+public class LoginServer extends FloodProtectorListener
+```
+
+### Key Constants
+
+<ParamField path="PROTOCOL_REV" type="int" default="0x0102">
+  Login protocol revision number (258)
+</ParamField>
+
+<ParamField path="LOGGER" type="Logger">
+  Logger instance for LoginServer events
+</ParamField>
+
+## Initialization Sequence
+
+The LoginServer follows this startup sequence:
+
+<Steps>
+  <Step title="Database Initialization">
+    ```java
+    DatabaseFactory.init();
+    ```
+    Establishes connection pool to the authentication database
+  </Step>
+
+  <Step title="Thread Pool Setup">
+    ```java
+    ThreadPool.init();
+    ```
+    Configures thread pools for handling client connections
+  </Step>
+
+  <Step title="Login Controller">
+    ```java
+    LoginController.load();
+    ```
+    Loads RSA key pairs for password encryption
+  </Step>
+
+  <Step title="GameServer Table">
+    ```java
+    GameServerTable.getInstance();
+    ```
+    Initializes the registry of connected GameServers
+  </Step>
+
+  <Step title="Ban List Loading">
+    ```java
+    loadBanFile();
+    ```
+    Loads banned accounts and IP addresses
+  </Step>
+
+  <Step title="GameServer Listener">
+    ```java
+    _gameServerListener = new GameServerListener();
+    _gameServerListener.start();
+    ```
+    Starts listening for GameServer connections on port 9014
+  </Step>
+</Steps>
+
+## Core Methods
+
+### getInstance()
+
+```java
+public static LoginServer getInstance()
+```
+
+Returns the singleton LoginServer instance.
+
+**Returns:** The active LoginServer instance
+
+### shutdown()
+
+```java
+public void shutdown(boolean restart)
+```
+
+Gracefully shuts down the LoginServer.
+
+<ParamField path="restart" type="boolean">
+  Whether to restart after shutdown
+</ParamField>
+
+**Behavior:**
+1. Stops accepting new connections
+2. Disconnects all active clients
+3. Saves server state to database
+4. Closes database connections
+5. Exits JVM (if not restarting)
+
+### addGameServerLogin()
+
+```java
+public void addGameServerLogin(int id, byte[] hexId, String address)
+```
+
+Registers a GameServer with the LoginServer.
+
+<ParamField path="id" type="int" required>
+  GameServer ID (1-127)
+</ParamField>
+
+<ParamField path="hexId" type="byte[]" required>
+  Hexadecimal authentication key
+</ParamField>
+
+<ParamField path="address" type="String" required>
+  GameServer IP address
+</ParamField>
+
+## Configuration
+
+LoginServer is configured through `login/config/Server.ini`:
+
+```ini
+# Network Configuration
+LoginHost = 0.0.0.0
+LoginPort = 2106
+
+# GameServer Communication
+GameServerLoginHost = *
+GameServerLoginPort = 9014
+
+# Security
+EnableFloodProtection = True
+FastConnectionLimit = 15
+NormalConnectionTime = 700
+FastConnectionTime = 350
+MaxConnectionPerIP = 50
+
+# Auto-Create Accounts
+AutoCreateAccounts = True
+
+# Scheduled Restart
+LoginServerScheduleRestart = False
+LoginServerScheduleRestartTime = 24
+```
+
+## Security Features
+
+### Flood Protection
+
+The LoginServer implements several flood protection mechanisms:
+
+<AccordionGroup>
+  <Accordion title="Connection Rate Limiting" icon="shield">
+    ```java
+    FastConnectionLimit = 15        // Max connections in FastConnectionTime
+    NormalConnectionTime = 700      // Normal connection interval (ms)
+    FastConnectionTime = 350        // Fast connection detection window (ms)
+    ```
+  </Accordion>
+
+  <Accordion title="IP-Based Restrictions" icon="network-wired">
+    ```java
+    MaxConnectionPerIP = 50         // Max simultaneous connections per IP
+    ```
+    
+    Prevents IP-based DDoS attacks
+  </Accordion>
+
+  <Accordion title="Failed Login Bans" icon="ban">
+    Automatically bans IPs after repeated failed login attempts
+    
+    Configurable thresholds in `LoginConfig.java`
+  </Accordion>
+</AccordionGroup>
+
+### Password Encryption
+
+Client passwords are encrypted using **RSA** before transmission:
+
+```java
+// RSA key pair generation in LoginController
+private void generateRSAKeys() throws GeneralSecurityException
+{
+    KeyPairGenerator keygen = KeyPairGenerator.getInstance("RSA");
+    keygen.initialize(new RSAKeyGenParameterSpec(1024, RSAKeyGenParameterSpec.F4));
+    _keyPairs = new ScrambledKeyPair[KEYS_SIZE];
+    
+    for (int i = 0; i < KEYS_SIZE; i++)
+    {
+        _keyPairs[i] = new ScrambledKeyPair(keygen.generateKeyPair());
+    }
+}
+```
+
+## Database Schema
+
+LoginServer uses these tables:
+
+**accounts**
+- `login` - Account username
+- `password` - Hashed password (SHA-256)
+- `access_level` - Account privilege level
+- `lastactive` - Last login timestamp
+- `lastIP` - Last login IP address
+
+**gameservers**
+- `server_id` - GameServer ID (1-127)
+- `hexid` - Authentication hexadecimal key
+- `host` - Internal server IP
+
+## Usage Example
+
+### Starting the LoginServer
+
+```bash
+cd dist/login
+./startLoginServer.sh    # Linux/Mac
+# or
+startLoginServer.bat     # Windows
+```
+
+### Monitoring Logs
+
+```bash
+tail -f log/java.log
+```
+
+Expected startup output:
+```
+LoginServer is now listening on *:2106
+Listening for GameServers on *:9014
+```
+
+### Stopping the Server
+
+```bash
+# Graceful shutdown
+kill -SIGTERM <pid>
+
+# Or use admin command (if configured)
+telnet localhost 7001
+shutdown
+```
+
+## Related Classes
+
+- [GameServer](/api/game-server) - Game server that connects to LoginServer
+- [DatabaseFactory](/api/database) - Database connection management
+- **LoginController** - Account authentication and validation
+- **GameServerTable** - Registry of connected GameServers
+- **LoginClient** - Represents a connected client session
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Port 2106 already in use" icon="exclamation-triangle">
+    **Solution:** Check if another service is using the port
+    
+    ```bash
+    sudo lsof -i :2106
+    netstat -an | grep 2106
+    ```
+    
+    Change `LoginPort` in `Server.ini` if needed
+  </Accordion>
+
+  <Accordion title="GameServer cannot connect" icon="server">
+    **Solution:** Verify GameServer hexid and IP configuration
+    
+    1. Check `gameservers` table in database
+    2. Verify `GameServerLoginHost` and `GameServerLoginPort` in `Server.ini`
+    3. Ensure firewall allows port 9014
+  </Accordion>
+
+  <Accordion title="Database connection failed" icon="database">
+    **Solution:** Check `Database.ini` configuration
+    
+    ```ini
+    URL = jdbc:mysql://localhost/l2jmobiusc4
+    Login = l2jmobius
+    Password = your_password
+    ```
+    
+    Test connection:
+    ```bash
+    mysql -u l2jmobius -p l2jmobiusc4
+    ```
+  </Accordion>
+
+  <Accordion title="Auto-create accounts not working" icon="user-plus">
+    **Solution:** Enable in `Server.ini`
+    
+    ```ini
+    AutoCreateAccounts = True
+    ```
+    
+    Restart LoginServer for changes to take effect
+  </Accordion>
+</AccordionGroup>
+
+## Best Practices
+
+<Note>
+  **Production Deployment:**
+  - Disable auto-create accounts (`AutoCreateAccounts = False`)
+  - Enable flood protection
+  - Use strong database passwords
+  - Configure firewall rules (allow 2106 for clients, 9014 for GameServers only)
+  - Monitor failed login attempts
+  - Schedule regular database backups
+  - Use RSA key rotation for enhanced security
+</Note>
+
+## Performance Monitoring
+
+Monitor LoginServer health with these metrics:
+
+```java
+// In LoginServer.java
+LOGGER.info("Active connections: " + getConnectionCount());
+LOGGER.info("Registered GameServers: " + GameServerTable.getInstance().getRegisteredGameServers().size());
+```
+
+Recommended monitoring:
+- **Active connections** - Track concurrent users
+- **Failed logins per hour** - Detect brute force attacks
+- **Average login time** - Database performance indicator
+- **Memory usage** - JVM heap monitoring

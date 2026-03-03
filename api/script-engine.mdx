@@ -1,0 +1,437 @@
+---
+title: 'ScriptEngine'
+description: 'Java-based scripting engine for loading and managing quest, AI, and handler scripts'
+---
+
+The `ScriptEngine` class manages the loading, compilation, and execution of all Java scripts in the L2J Mobius server, including quests, AI behaviors, and handler implementations.
+
+**Source:** `org.l2jmobius.gameserver.scripting.ScriptEngine`  
+**Location:** `java/org/l2jmobius/gameserver/scripting/ScriptEngine.java:51`
+
+## Overview
+
+ScriptEngine provides:
+- Automatic discovery and compilation of `.java` scripts
+- Hot-reload capability for script modifications
+- Exclusion filtering via `Scripts.xml`
+- Master handler registration system
+- Error reporting and script debugging
+
+## Class Structure
+
+```java
+public class ScriptEngine implements IXmlReader
+```
+
+### Key Constants
+
+<ParamField path="SCRIPT_FOLDER" type="Path">
+  Root directory for all scripts: `data/scripts/`
+</ParamField>
+
+<ParamField path="MASTER_HANDLER_FILE" type="Path">
+  Main handler registration file: `handlers/MasterHandler.java`
+</ParamField>
+
+<ParamField path="EFFECT_MASTER_HANDLER_FILE" type="Path">
+  Effect handler registration file: `handlers/EffectMasterHandler.java`
+</ParamField>
+
+## Script Loading Process
+
+<Steps>
+  <Step title="Load Exclusions">
+    Parse `config/Scripts.xml` to identify scripts to skip
+    
+    ```xml
+    <list>
+      <script>ai/areas/TalkingIsland/Deprecated.java</script>
+      <script>quests/Q00999_TestQuest</script>
+    </list>
+    ```
+  </Step>
+
+  <Step title="Scan Script Directory">
+    Recursively scan `data/scripts/` for `.java` files
+    
+    ```java
+    Files.walkFileTree(SCRIPT_FOLDER, new ScriptFileVisitor());
+    ```
+  </Step>
+
+  <Step title="Compile Scripts">
+    Compile all discovered scripts using `ScriptExecutor`
+    
+    ```java
+    SCRIPT_EXECUTOR.compileScript(scriptPath);
+    ```
+  </Step>
+
+  <Step title="Execute Scripts">
+    Instantiate compiled classes and register them
+    
+    ```java
+    Class<?> clazz = SCRIPT_EXECUTOR.loadClass(className);
+    clazz.getDeclaredConstructor().newInstance();
+    ```
+  </Step>
+
+  <Step title="Register Handlers">
+    Execute master handler files to register all handlers
+    
+    - `MasterHandler.java` - Admin, item, voiced command handlers
+    - `EffectMasterHandler.java` - Skill effect handlers
+  </Step>
+</Steps>
+
+## Core Methods
+
+### getInstance()
+
+```java
+public static ScriptEngine getInstance()
+```
+
+Returns the singleton ScriptEngine instance.
+
+**Returns:** The active ScriptEngine instance
+
+### reload()
+
+```java
+public void reload()
+```
+
+Reloads all scripts from disk.
+
+**Behavior:**
+1. Clears existing script cache
+2. Reloads `Scripts.xml` exclusions
+3. Rescans script directory
+4. Recompiles modified scripts
+5. Re-registers all handlers
+
+<Warning>
+  Reloading scripts while the server is running may cause temporary instability. Use during maintenance windows or off-peak hours.
+</Warning>
+
+### executeScript()
+
+```java
+public boolean executeScript(File file)
+```
+
+Compiles and executes a specific script file.
+
+<ParamField path="file" type="File" required>
+  Script file to execute
+</ParamField>
+
+**Returns:** `true` if script executed successfully, `false` otherwise
+
+**Usage:**
+```java
+File questScript = new File("data/scripts/quests/Q00001_LettersOfLove/Q00001_LettersOfLove.java");
+ScriptEngine.getInstance().executeScript(questScript);
+```
+
+### executeScriptsList()
+
+```java
+public void executeScriptsList()
+```
+
+Executes master handler scripts to register all handlers.
+
+Called automatically during server startup after all individual scripts are loaded.
+
+## Script Directory Structure
+
+```
+data/scripts/
+├── ai/
+│   ├── areas/          # Area-specific AI
+│   ├── bosses/         # Raid boss AI
+│   └── others/         # Misc NPC AI
+├── conquerablehalls/   # Clan hall siege scripts
+├── custom/             # Custom server features
+├── events/             # Seasonal events
+├── handlers/           # Handler implementations
+│   ├── MasterHandler.java
+│   ├── EffectMasterHandler.java
+│   ├── admincommandhandlers/
+│   ├── itemhandlers/
+│   ├── effecthandlers/
+│   └── voicedcommandhandlers/
+├── quests/             # All quest scripts
+│   ├── Q00001_LettersOfLove/
+│   ├── Q00002_WhatWomenWant/
+│   └── ...
+├── vehicles/           # Boat and airship scripts
+└── village_master/     # Class change NPCs
+```
+
+## Configuration
+
+### Scripts.xml
+
+Define scripts to exclude from loading:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<list xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../xsd/Scripts.xsd">
+  <!-- Exclude specific scripts -->
+  <script>ai/areas/TalkingIsland/TestAI.java</script>
+  <script>quests/Q00999_DevelopmentQuest</script>
+  
+  <!-- Exclude entire directories -->
+  <script>custom/experimental</script>
+</list>
+```
+
+### Development Mode
+
+Enable script debugging in `config/Development.ini`:
+
+```ini
+# Script Development
+DevMode = True
+ScriptDebug = True
+```
+
+With debug mode:
+- Detailed compilation error messages
+- Stack traces for script exceptions
+- Performance profiling per script
+
+## Script Types
+
+### Quest Scripts
+
+```java
+public class Q00001_LettersOfLove extends Quest
+{
+    public Q00001_LettersOfLove()
+    {
+        super(1);
+        addStartNpc(DARIN);
+        addTalkId(DARIN, ROXXY, BAULRO);
+    }
+    
+    @Override
+    public String onEvent(String event, Npc npc, Player player)
+    {
+        // Quest logic
+    }
+}
+```
+
+Automatically registered when instantiated.
+
+### AI Scripts
+
+```java
+public class Antharas extends AbstractNpcAI
+{
+    public Antharas()
+    {
+        addKillId(ANTHARAS);
+        addAttackId(ANTHARAS);
+    }
+    
+    @Override
+    public String onKill(Npc npc, Player killer, boolean isSummon)
+    {
+        // Boss AI logic
+    }
+}
+```
+
+### Handler Scripts
+
+```java
+@RegisterType(AdminCommandType.ADMIN)
+@RegisterCommand({"admin_teleport", "admin_move"})
+public class AdminTeleport implements IAdminCommandHandler
+{
+    @Override
+    public boolean useAdminCommand(String command, Player activeChar)
+    {
+        // Command logic
+    }
+}
+```
+
+Registered via `MasterHandler.java`.
+
+## Error Handling
+
+ScriptEngine provides detailed error reporting:
+
+```java
+// Compilation errors
+LOGGER.warning("Failed to compile: " + scriptPath);
+LOGGER.warning("Error: " + compilationError.getMessage());
+
+// Runtime errors
+LOGGER.warning("Script execution failed: " + scriptPath);
+LOGGER.warning("Cause: " + exception.getCause());
+```
+
+### Common Errors
+
+<AccordionGroup>
+  <Accordion title="Compilation Error" icon="code">
+    **Cause:** Syntax error in script
+    
+    **Solution:** Check script syntax and imports
+    
+    ```
+    Error: cannot find symbol
+    Location: Q00001_LettersOfLove.java:45
+    ```
+  </Accordion>
+
+  <Accordion title="Class Not Found" icon="file-circle-xmark">
+    **Cause:** Missing dependency or incorrect package
+    
+    **Solution:** Verify imports and class paths
+    
+    ```java
+    import org.l2jmobius.gameserver.model.quest.Quest;
+    ```
+  </Accordion>
+
+  <Accordion title="Script Excluded" icon="ban">
+    **Cause:** Script listed in `Scripts.xml`
+    
+    **Solution:** Remove from exclusion list or verify intentional exclusion
+  </Accordion>
+
+  <Accordion title="Duplicate Registration" icon="copy">
+    **Cause:** Script instantiated multiple times
+    
+    **Solution:** Ensure script constructor doesn't call `new` on itself
+  </Accordion>
+</AccordionGroup>
+
+## Hot Reload
+
+Reload scripts without server restart:
+
+```java
+// Via admin command
+//reload script <scriptName>
+
+// Programmatically
+ScriptEngine.getInstance().reload();
+```
+
+<Note>
+  **Hot Reload Limitations:**
+  - Cannot reload scripts with active timers
+  - May cause memory leaks if not properly unloaded
+  - Quest states are preserved
+  - Use `//reload handlers` for handler changes
+</Note>
+
+## Performance Considerations
+
+### Script Caching
+
+Compiled scripts are cached in memory:
+
+```java
+private final Map<String, Class<?>> _scriptCache = new HashMap<>();
+```
+
+### Compilation Time
+
+Typical script compilation times:
+- **Simple quest:** 50-100ms
+- **Complex AI:** 200-500ms
+- **Handler:** 30-80ms
+- **Full reload:** 5-15 seconds (600+ scripts)
+
+### Memory Usage
+
+- **Per script class:** ~10-50 KB
+- **Total script cache:** ~30-100 MB
+- **Compilation overhead:** +50 MB during reload
+
+## Related Classes
+
+- [Quest](/scripting/quest-scripts) - Base class for quest scripts
+- **AbstractNpcAI** - Base class for AI scripts
+- **IAdminCommandHandler** - Interface for admin command handlers
+- **ScriptExecutor** - Handles Java compilation and execution
+- **ScriptFileManager** - Manages script file discovery
+
+## Best Practices
+
+<Note>
+  **Script Development:**
+  - Use descriptive class and file names
+  - Follow naming conventions (`Q00001_QuestName.java`)
+  - Add scripts to `Scripts.xml` if incomplete
+  - Test scripts on development server first
+  - Use `//reload script` for iterative development
+  - Clean up timers and listeners in `onAdvEvent`
+  - Avoid static variables (cause issues on reload)
+  - Use logging for debugging (`LOGGER.info()`)
+</Note>
+
+## Admin Commands
+
+Manage scripts via in-game commands:
+
+```
+//reload script <scriptName>     - Reload specific script
+//reload handlers                - Reload all handlers
+//reload all                     - Reload all scripts
+//script <scriptPath>            - Execute script file
+```
+
+Example:
+```
+//reload script Q00001_LettersOfLove
+//reload handlers
+```
+
+## Debugging Scripts
+
+Enable detailed logging:
+
+```java
+// In your script
+private static final Logger LOGGER = Logger.getLogger(YourScript.class.getName());
+
+public YourScript()
+{
+    LOGGER.info("Initializing YourScript");
+    // Track execution flow
+}
+```
+
+Check logs:
+```bash
+tail -f dist/game/log/java.log | grep YourScript
+```
+
+## Integration with GameServer
+
+ScriptEngine is initialized during GameServer startup:
+
+```java
+// In GameServer.java
+ScriptEngine.getInstance();  // Load all scripts
+```
+
+Execution order:
+1. Database initialization
+2. Data loading (items, NPCs, skills)
+3. **ScriptEngine initialization** ← Scripts loaded here
+4. Network startup
+5. Server ready
+
+This ensures all game data is available to scripts before they execute.

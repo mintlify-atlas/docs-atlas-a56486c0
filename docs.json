@@ -80,8 +80,10 @@
             "group": "Core",
             "pages": [
               "api/game-server",
+              "api/login-server",
               "api/network",
-              "api/database"
+              "api/database",
+              "api/script-engine"
             ]
           },
           {

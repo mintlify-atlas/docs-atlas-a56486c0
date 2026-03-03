@@ -14,7 +14,7 @@ Use the `//serverinfo` admin command to view comprehensive server statistics:
 
 ```bash
 //serverinfo
-```
+```bash
 
 **Metrics displayed:**
 
@@ -54,7 +54,7 @@ The server info command uses Java Management Extensions (JMX) to gather metrics:
 ```java
 final MemoryMXBean MEMORY_MX_BEAN = ManagementFactory.getMemoryMXBean();
 final ThreadMXBean THREAD_MX_BEAN = ManagementFactory.getThreadMXBean();
-```
+```bash
 
 ## Memory Monitoring
 
@@ -71,7 +71,7 @@ final ThreadMXBean THREAD_MX_BEAN = ManagementFactory.getThreadMXBean();
   ```java
   final MemoryUsage heapMemoryUsage = MEMORY_MX_BEAN.getHeapMemoryUsage();
   final long freeMemory = heapMemoryUsage.getMax() - heapMemoryUsage.getUsed();
-  ```
+  ```bash
   
   **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:61`
 </Accordion>
@@ -95,7 +95,7 @@ Configure JVM memory settings in your startup script:
 ```bash
 java -Xms2G -Xmx4G -XX:+UseG1GC \
   -jar L2J_Mobius_C4_ScionsOfDestiny.jar
-```
+```bash
 
 **Recommended settings:**
 - `-Xms`: Initial heap size (2-4GB for small servers)
@@ -114,7 +114,7 @@ Monitor different player categories:
     
     ```java
     World.getInstance().getPlayers().size()
-    ```
+    ```bash
     
     **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:119`
   </Accordion>
@@ -124,7 +124,7 @@ Monitor different player categories:
     
     ```java
     if ((player.getClient() == null) || player.getClient().isDetached())
-    ```
+    ```bash
     
     **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:130`
   </Accordion>
@@ -134,7 +134,7 @@ Monitor different player categories:
     
     ```java
     AdminData.getInstance().getAllGms(true)
-    ```
+    ```bash
     
     **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:140`
   </Accordion>
@@ -154,21 +154,21 @@ Maximum players configured in `dist/game/config/General.ini`:
 
 ```ini
 MaximumOnlineUsers = 100
-```
+```bash
 
 ## Logging Configuration
 
 ### Log Files Location
 
 Server logs are stored in:
-```
+```bash
 dist/game/log/
 ├── java.log          # Main server log
 ├── chat.log          # Chat messages
 ├── items.log         # Item transactions
 ├── audit.log         # GM actions audit
 └── error.log         # Error messages
-```
+```bash
 
 ### Java Logging Configuration
 
@@ -178,7 +178,7 @@ Logging is configured via Java's built-in logging framework:
 import java.util.logging.Logger;
 
 private static final Logger LOGGER = Logger.getLogger(AdminServerInfo.class.getName());
-```
+```bash
 
 <Note>
 Most admin command handlers include logging for auditing purposes.
@@ -192,7 +192,7 @@ All administrative actions are logged via `GMAudit` class:
 ```java
 GMAudit.logAction(activeChar.getName() + " [" + activeChar.getObjectId() + "]", 
                   cmd, affect.name(), name);
-```
+```bash
 
 **Logged actions include:**
 - Player punishments (ban, jail, chat ban)
@@ -208,17 +208,17 @@ GMAudit.logAction(activeChar.getName() + " [" + activeChar.getObjectId() + "]",
 **Live Threads:** Currently active threads
 ```java
 THREAD_MX_BEAN.getThreadCount()
-```
+```bash
 
 **Daemon Threads:** Background service threads
 ```java
 THREAD_MX_BEAN.getDaemonThreadCount()
-```
+```bash
 
 **Peak Threads:** Maximum concurrent threads reached
 ```java
 THREAD_MX_BEAN.getPeakThreadCount()
-```
+```bash
 
 **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:63`
 
@@ -234,7 +234,7 @@ Uptime is calculated from server start time:
 long time = System.currentTimeMillis() - GameServer.getStartTime();
 final long days = TimeUnit.MILLISECONDS.toDays(time);
 final long hours = TimeUnit.MILLISECONDS.toHours(time);
-```
+```bash
 
 **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:106`
 
@@ -247,7 +247,7 @@ Monitor in-game time and day/night cycles:
 ```java
 GameTimeTaskManager.getInstance().getGameTime();
 GameTimeTaskManager.getInstance().isNight();
-```
+```bash
 
 **Features:**
 - 24-hour game day cycle
@@ -264,7 +264,7 @@ Monitor HTML template cache usage:
 
 ```bash
 //reload html
-```
+```bash
 
 **Output includes:**
 - Memory usage in megabytes
@@ -279,16 +279,16 @@ Monitor HTML template cache usage:
 The server uses HikariCP for database connection pooling. Monitor connections via:
 
 **Configuration location:**
-```
+```bash
 dist/game/config/Database.ini
-```
+```bash
 
 **Key settings:**
 ```ini
 MaximumPoolSize = 10
 ConnectionTimeout = 30000
 IdleTimeout = 600000
-```
+```bash
 
 ### Database Operations Logging
 
@@ -297,7 +297,7 @@ Database queries can be logged for performance analysis. Enable in `Database.ini
 ```ini
 # Enable query logging (development only)
 LogQueries = True
-```
+```bash
 
 <Warning>
 Query logging significantly impacts performance. Only enable in development environments.
@@ -311,7 +311,7 @@ Monitor pathfinding and geodata status:
 
 ```java
 GeoEngineConfig.PATHFINDING > 0 ? "Enabled" : "Disabled"
-```
+```bash
 
 **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:76`
 
@@ -321,7 +321,7 @@ Many monitoring events broadcast to all online GMs:
 
 ```java
 AdminData.getInstance().broadcastMessageToGMs(activeChar.getName() + ": Reloaded Configs.");
-```
+```bash
 
 **Source:** `handlers/admincommandhandlers/AdminReload.java:84`
 
@@ -343,7 +343,7 @@ java -Dcom.sun.management.jmxremote \
   -Dcom.sun.management.jmxremote.authenticate=false \
   -Dcom.sun.management.jmxremote.ssl=false \
   -jar L2J_Mobius_C4_ScionsOfDestiny.jar
-```
+```bash
 
 **Compatible tools:**
 - VisualVM
