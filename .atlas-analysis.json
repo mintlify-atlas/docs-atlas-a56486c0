@@ -1,0 +1,116 @@
+{
+  "projectType": "infrastructure",
+  "projectName": "L2J Mobius Chronicle 4",
+  "projectDescription": "A Lineage 2 Chronicle 4 game server emulator with ELO-based Olympiad, extensive quest system, and raid boss mechanics",
+  "theme": "aspen",
+  "primaryColor": "#8B4513",
+  "lightColor": "#D2691E",
+  "darkColor": "#654321",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "features"
+            ]
+          },
+          {
+            "group": "Server Setup",
+            "pages": [
+              "setup/installation",
+              "setup/database",
+              "setup/game-server",
+              "setup/login-server",
+              "setup/configuration"
+            ]
+          },
+          {
+            "group": "Game Systems",
+            "pages": [
+              "systems/olympiad",
+              "systems/seven-signs",
+              "systems/castle-siege",
+              "systems/clan-system",
+              "systems/raid-bosses",
+              "systems/dimensional-rift",
+              "systems/fishing"
+            ]
+          },
+          {
+            "group": "Scripting",
+            "pages": [
+              "scripting/overview",
+              "scripting/quest-scripts",
+              "scripting/ai-scripts",
+              "scripting/handlers"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/commands",
+              "admin/monitoring",
+              "admin/security",
+              "admin/troubleshooting"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Core",
+            "pages": [
+              "api/game-server",
+              "api/network",
+              "api/database"
+            ]
+          },
+          {
+            "group": "Game Models",
+            "pages": [
+              "api/player",
+              "api/npc",
+              "api/items",
+              "api/skills"
+            ]
+          },
+          {
+            "group": "Managers",
+            "pages": [
+              "api/managers/olympiad",
+              "api/managers/siege",
+              "api/managers/spawn"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "ELO-based Olympiad PvP System",
+    "Seven Signs Event System",
+    "Castle Siege Warfare",
+    "Epic Raid Bosses (Antharas, Valakas, Baium)",
+    "Extensive Quest System (600+ quests)",
+    "Dimensional Rift Instances",
+    "Clan & Alliance Management",
+    "Scripting Engine for AI & Quests"
+  ],
+  "publicApiSurface": [
+    "org.l2jmobius.gameserver.GameServer",
+    "org.l2jmobius.loginserver.LoginServer",
+    "org.l2jmobius.gameserver.model.actor.Player",
+    "org.l2jmobius.gameserver.model.olympiad.Olympiad",
+    "org.l2jmobius.gameserver.scripting.ScriptEngineManager",
+    "org.l2jmobius.gameserver.managers.CastleManager",
+    "org.l2jmobius.gameserver.managers.RaidBossSpawnManager",
+    "org.l2jmobius.gameserver.data.xml.NpcData"
+  ]
+}
