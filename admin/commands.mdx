@@ -1,0 +1,512 @@
+---
+title: 'Admin Commands Reference'
+description: 'Complete reference for L2J Mobius Chronicle 4 administrator commands'
+icon: 'terminal'
+---
+
+This page provides a comprehensive reference for all administrator commands available in L2J Mobius Chronicle 4. Commands are organized by category for easy navigation.
+
+## Command Syntax
+
+All admin commands begin with `//` or `admin_` prefix. For example:
+- `//teleport` or `admin_teleport`
+- `//spawn 30001` or `admin_spawn 30001`
+
+<Note>
+Most commands require specific access levels defined in `dist/game/config/AccessLevels.xml`. See [Security Configuration](/admin/security) for access level details.
+</Note>
+
+## Server Management
+
+<AccordionGroup>
+  <Accordion title="//server_shutdown [seconds]" icon="power-off">
+    Initiates a graceful server shutdown after the specified delay.
+    
+    **Syntax:** `//server_shutdown <seconds>`
+    
+    **Example:**
+    ```
+    //server_shutdown 300
+    ```
+    
+    Broadcasts shutdown warning to all players and saves server state.
+    
+    **Source:** `handlers/admincommandhandlers/AdminShutdown.java:49`
+  </Accordion>
+
+  <Accordion title="//server_restart [seconds]" icon="rotate">
+    Restarts the server after the specified delay.
+    
+    **Syntax:** `//server_restart <seconds>`
+    
+    **Example:**
+    ```
+    //server_restart 600
+    ```
+    
+    Schedules server restart with player notification.
+    
+    **Source:** `handlers/admincommandhandlers/AdminShutdown.java:69`
+  </Accordion>
+
+  <Accordion title="//server_abort" icon="ban">
+    Cancels a pending shutdown or restart.
+    
+    **Syntax:** `//server_abort`
+    
+    Stops any scheduled shutdown/restart countdown.
+    
+    **Source:** `handlers/admincommandhandlers/AdminShutdown.java:89`
+  </Accordion>
+
+  <Accordion title="//serverinfo" icon="info">
+    Displays comprehensive server information.
+    
+    **Syntax:** `//serverinfo`
+    
+    **Information displayed:**
+    - Operating system details
+    - Online player count and slots
+    - Game time and day/night status
+    - Geodata status
+    - Memory usage (used/free/total)
+    - Thread statistics (live/daemon/peak)
+    - Garbage collector metrics
+    - Server uptime
+    
+    **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:59`
+  </Accordion>
+</AccordionGroup>
+
+## Reload Commands
+
+<AccordionGroup>
+  <Accordion title="//reload" icon="arrows-rotate">
+    Reloads server data without full restart.
+    
+    **Syntax:** `//reload <type> [parameter]`
+    
+    **Available types:**
+    - `config` - Reload all configuration files
+    - `access` - Reload access levels and admin data
+    - `npc` - Reload NPC templates
+    - `quest [id|name]` - Reload specific quest or all quests
+    - `walker` - Reload NPC walking routes
+    - `htm[l] [path]` - Reload HTML cache (specific file or all)
+    - `multisell` - Reload multisell data
+    - `buylist` - Reload shop buy lists
+    - `teleport` - Reload teleport data
+    - `skill` - Reload skill data
+    - `item` - Reload item templates
+    - `door` - Reload door data
+    - `zone` - Reload zone definitions
+    - `effect` - Reload effect handlers
+    - `handler` - Reload command handlers
+    - `enchant` - Reload enchant data
+    
+    **Examples:**
+    ```
+    //reload config
+    //reload quest 255
+    //reload html admin/main.htm
+    ```
+    
+    <Warning>
+    Reloading during runtime is NOT RECOMMENDED for live servers. Use only in development environments.
+    </Warning>
+    
+    **Source:** `handlers/admincommandhandlers/AdminReload.java:62`
+  </Accordion>
+</AccordionGroup>
+
+## Player Management
+
+<AccordionGroup>
+  <Accordion title="//kick [player]" icon="user-xmark">
+    Disconnects a player from the server.
+    
+    **Syntax:** `//kick <player_name>`
+    
+    **Example:**
+    ```
+    //kick PlayerName
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminKick.java:42`
+  </Accordion>
+
+  <Accordion title="//kick_non_gm" icon="users-slash">
+    Kicks all non-GM players from the server.
+    
+    **Syntax:** `//kick_non_gm`
+    
+    Useful for server maintenance or emergency situations.
+    
+    **Source:** `handlers/admincommandhandlers/AdminKick.java:58`
+  </Accordion>
+
+  <Accordion title="//edit_character" icon="user-pen">
+    Opens character editing interface.
+    
+    **Syntax:** `//edit_character`
+    
+    **Available modifications:**
+    - Character name, title, class
+    - Karma, PK count, PVP count
+    - Fame points
+    - Character sex and appearance
+    - Name and title colors
+    - Recommendation points
+    
+    **Source:** `handlers/admincommandhandlers/AdminEditChar.java:73`
+  </Accordion>
+
+  <Accordion title="//setkarma [amount]" icon="scale-balanced">
+    Sets target player's karma value.
+    
+    **Syntax:** `//setkarma <amount>`
+    
+    **Example:**
+    ```
+    //setkarma 0
+    //setkarma 5000
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminEditChar.java:76`
+  </Accordion>
+
+  <Accordion title="//setfame [amount]" icon="star">
+    Sets target player's fame points.
+    
+    **Syntax:** `//setfame <amount>`
+    
+    **Example:**
+    ```
+    //setfame 1000
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminEditChar.java:77`
+  </Accordion>
+</AccordionGroup>
+
+## Teleportation Commands
+
+<AccordionGroup>
+  <Accordion title="//move_to [x] [y] [z]" icon="location-crosshairs">
+    Teleports your character to specific coordinates.
+    
+    **Syntax:** `//move_to <x> <y> <z>`
+    
+    **Example:**
+    ```
+    //move_to 83400 147943 -3404
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminTeleport.java:143`
+  </Accordion>
+
+  <Accordion title="//teleportto [player]" icon="location-arrow">
+    Teleports you to target player.
+    
+    **Syntax:** `//teleportto <player_name>`
+    
+    **Example:**
+    ```
+    //teleportto PlayerName
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminTeleport.java:175`
+  </Accordion>
+
+  <Accordion title="//recall [player]" icon="hand-point-up">
+    Teleports target player to your location.
+    
+    **Syntax:** `//recall <player_name>`
+    
+    **Example:**
+    ```
+    //recall PlayerName
+    ```
+    
+    Works on both online and offline players.
+    
+    **Source:** `handlers/admincommandhandlers/AdminTeleport.java:188`
+  </Accordion>
+
+  <Accordion title="//sendhome [player]" icon="house">
+    Sends player to their racial hometown.
+    
+    **Syntax:** `//sendhome [player_name]`
+    
+    Teleports player to appropriate town based on race:
+    - Human: Talking Island
+    - Elf: Elf Village
+    - Dark Elf: Dark Elf Village
+    - Orc: Orc Village
+    - Dwarf: Dwarf Village
+    
+    **Source:** `handlers/admincommandhandlers/AdminTeleport.java:268`
+  </Accordion>
+
+  <Accordion title="//instant_move" icon="bolt">
+    Enables instant teleport mode (click to teleport).
+    
+    **Syntax:** `//instant_move`
+    
+    Click anywhere in the game world to instantly teleport there.
+    
+    **Source:** `handlers/admincommandhandlers/AdminTeleport.java:89`
+  </Accordion>
+</AccordionGroup>
+
+## Punishment Commands
+
+<AccordionGroup>
+  <Accordion title="//ban_char [player]" icon="user-lock">
+    Permanently bans a character.
+    
+    **Syntax:** `//ban_char <character_name>`
+    
+    **Example:**
+    ```
+    //ban_char BadPlayer
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:369`
+  </Accordion>
+
+  <Accordion title="//unban_char [player]" icon="user-lock-open">
+    Removes character ban.
+    
+    **Syntax:** `//unban_char <character_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:377`
+  </Accordion>
+
+  <Accordion title="//ban_acc [account]" icon="lock">
+    Bans an entire account.
+    
+    **Syntax:** `//ban_acc <account_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:385`
+  </Accordion>
+
+  <Accordion title="//ban_chat [player]" icon="comment-slash">
+    Restricts player from using chat.
+    
+    **Syntax:** `//ban_chat <player_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:417`
+  </Accordion>
+
+  <Accordion title="//jail [player]" icon="handcuffs">
+    Sends player to jail.
+    
+    **Syntax:** `//jail <player_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:433`
+  </Accordion>
+
+  <Accordion title="//unjail [player]" icon="door-open">
+    Releases player from jail.
+    
+    **Syntax:** `//unjail <player_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:441`
+  </Accordion>
+
+  <Accordion title="//punishment" icon="gavel">
+    Opens advanced punishment management interface.
+    
+    **Syntax:** `//punishment [info|add|remove|player]`
+    
+    **Punishment types:**
+    - BAN - Account/character ban
+    - CHAT_BAN - Chat restriction
+    - JAIL - Character imprisonment
+    
+    **Affect types:**
+    - ACCOUNT - Affects entire account
+    - CHARACTER - Affects specific character
+    - IP - Affects IP address
+    - HWID - Affects hardware ID
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:88`
+  </Accordion>
+</AccordionGroup>
+
+## Spawn Commands
+
+<AccordionGroup>
+  <Accordion title="//spawn [npc_id]" icon="dragon">
+    Spawns an NPC at your location.
+    
+    **Syntax:** `//spawn <npc_id> [respawn_time]`
+    
+    **Example:**
+    ```
+    //spawn 30001
+    //spawn 30001 60
+    ```
+    
+    Spawns NPC with optional respawn time in seconds.
+    
+    **Source:** `handlers/admincommandhandlers/AdminSpawn.java:72`
+  </Accordion>
+
+  <Accordion title="//unspawnall" icon="trash">
+    Removes all spawned NPCs from the world.
+    
+    **Syntax:** `//unspawnall`
+    
+    <Warning>
+    This command removes ALL NPCs. Use with caution!
+    </Warning>
+    
+    **Source:** `handlers/admincommandhandlers/AdminSpawn.java:75`
+  </Accordion>
+
+  <Accordion title="//respawnall" icon="arrows-spin">
+    Respawns all NPCs in the world.
+    
+    **Syntax:** `//respawnall`
+    
+    **Source:** `handlers/admincommandhandlers/AdminSpawn.java:76`
+  </Accordion>
+</AccordionGroup>
+
+## GM Mode Commands
+
+<AccordionGroup>
+  <Accordion title="//gmliston" icon="eye">
+    Adds your character to the GM list (visible to players).
+    
+    **Syntax:** `//gmliston`
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:55`
+  </Accordion>
+
+  <Accordion title="//gmlistoff" icon="eye-slash">
+    Removes your character from the GM list (invisible mode).
+    
+    **Syntax:** `//gmlistoff`
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:56`
+  </Accordion>
+
+  <Accordion title="//silence" icon="volume-xmark">
+    Toggles private message acceptance mode.
+    
+    **Syntax:** `//silence`
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:57`
+  </Accordion>
+
+  <Accordion title="//diet" icon="weight-scale">
+    Toggles weight penalty mode.
+    
+    **Syntax:** `//diet [on|off]`
+    
+    Disables encumbrance penalties for GM.
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:58`
+  </Accordion>
+
+  <Accordion title="//tradeoff" icon="handshake-slash">
+    Toggles trade request acceptance.
+    
+    **Syntax:** `//tradeoff [on|off]`
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:59`
+  </Accordion>
+</AccordionGroup>
+
+## Olympiad Commands
+
+<AccordionGroup>
+  <Accordion title="//checkolympiad" icon="calendar">
+    Displays Olympiad period information.
+    
+    **Syntax:** `//checkolympiad`
+    
+    Shows:
+    - Current server time
+    - Olympiad period end time
+    - Weekly change schedule
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:62`
+  </Accordion>
+
+  <Accordion title="//saveolymp" icon="floppy-disk">
+    Manually saves Olympiad state.
+    
+    **Syntax:** `//saveolymp`
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:63`
+  </Accordion>
+
+  <Accordion title="//endolympiad" icon="trophy">
+    Manually ends Olympiad period and selects heroes.
+    
+    **Syntax:** `//endolympiad`
+    
+    <Warning>
+    This immediately cycles the Olympiad and calculates new heroes!
+    </Warning>
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:66`
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Commands
+
+<AccordionGroup>
+  <Accordion title="//setconfig" icon="gears">
+    Dynamically modifies server rate configuration.
+    
+    **Syntax:** `//setconfig <parameter> <value>`
+    
+    **Available parameters:**
+    - `RateXp` - Experience rate multiplier
+    - `RateSp` - Skill point rate multiplier
+    - `RateDropSpoil` - Spoil drop rate multiplier
+    
+    **Example:**
+    ```
+    //setconfig RateXp 2.0
+    //setconfig RateSp 1.5
+    ```
+    
+    <Note>
+    Changes take effect immediately but are not persisted to config files.
+    </Note>
+    
+    **Source:** `handlers/admincommandhandlers/AdminAdmin.java:67`
+  </Accordion>
+</AccordionGroup>
+
+## Additional Resources
+
+<CardGroup cols={2}>
+  <Card title="Security Configuration" icon="shield" href="/admin/security">
+    Access levels and permission management
+  </Card>
+  <Card title="Server Monitoring" icon="chart-line" href="/admin/monitoring">
+    Performance metrics and logging
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/admin/troubleshooting">
+    Common issues and solutions
+  </Card>
+  <Card title="Source Code" icon="code" href="https://github.com/L2J/L2J_Mobius">
+    View admin command handlers
+  </Card>
+</CardGroup>
+
+## Command Handler Location
+
+All admin command handlers are located in:
+```
+dist/game/data/scripts/handlers/admincommandhandlers/
+```
+
+Each command is implemented in a separate Java class that implements `IAdminCommandHandler`.

@@ -1,0 +1,479 @@
+---
+title: 'Raid Bosses'
+description: 'Epic raid boss spawning, respawn mechanics, and point system'
+icon: 'dragon'
+---
+
+## Overview
+
+Raid Bosses are powerful world bosses that require coordinated party or alliance efforts to defeat. They drop rare items, provide significant experience, and grant **Raid Points** for clan reputation and individual rewards.
+
+<Note>
+  Raid bosses feature dynamic respawn timers, instanced encounters, and a point reward system that encourages organized PvE content.
+</Note>
+
+## Raid Boss Types
+
+### Epic Raid Bosses
+
+The most powerful encounters in Chronicle 4:
+
+<AccordionGroup>
+  <Accordion title="Antharas" icon="dragon">
+    - **Level**: 79
+    - **Location**: Dragon Valley
+    - **Special**: Fire-based attacks, flight phases
+    - **Drops**: Antharas Earring, rare weapons
+    - **Respawn**: 192-216 hours (8-9 days)
+  </Accordion>
+
+  <Accordion title="Valakas" icon="fire">
+    - **Level**: 85
+    - **Location**: Valakas Lair
+    - **Special**: Massive AoE damage, lava mechanics
+    - **Drops**: Valakas Necklace, top-tier equipment
+    - **Respawn**: 264-312 hours (11-13 days)
+  </Accordion>
+
+  <Accordion title="Baium" icon="ghost">
+    - **Level**: 75
+    - **Special**: Teleportation, debuff attacks
+    - **Location**: Tower of Insolence
+    - **Drops**: Baium Ring, blessed scrolls
+    - **Respawn**: 120-192 hours (5-8 days)
+  </Accordion>
+
+  <Accordion title="Queen Ant" icon="bug">
+    - **Level**: 40
+    - **Location**: Ant Nest
+    - **Special**: Summons minions, poison attacks
+    - **Drops**: Queen Ant Ring, materials
+    - **Respawn**: 36-48 hours
+  </Accordion>
+
+  <Accordion title="Core" icon="meteor">
+    - **Level**: 50
+    - **Location**: Cruma Tower
+    - **Special**: Earth-based attacks, reflect damage
+    - **Drops**: Core Ring, crafting materials
+    - **Respawn**: 40-60 hours
+  </Accordion>
+
+  <Accordion title="Orfen" icon="octopus">
+    - **Level**: 50
+    - **Location**: Sea of Spores
+    - **Special**: Water attacks, teleportation
+    - **Drops**: Orfen Earring, recipes
+    - **Respawn**: 48-72 hours
+  </Accordion>
+</AccordionGroup>
+
+### Standard Raid Bosses
+
+Numerous mid-tier raid bosses (levels 25-75) spawn throughout the world with shorter respawn times (1-12 hours).
+
+## Spawn Management
+
+### RaidBossSpawnManager
+
+Core system managing all raid boss spawns:
+
+```java
+protected static final Map<Integer, RaidBoss> _bosses = new ConcurrentHashMap<>();
+protected static final Map<Integer, Spawn> _spawns = new ConcurrentHashMap<>();
+protected static final Map<Integer, StatSet> _storedInfo = new ConcurrentHashMap<>();
+protected static final Map<Integer, ScheduledFuture<?>> _schedules = new ConcurrentHashMap<>();
+```
+
+**Source**: `RaidBossSpawnManager.java:50-53`
+
+### Database Schema
+
+```sql
+CREATE TABLE raidboss_spawnlist (
+    boss_id INT PRIMARY KEY,
+    loc_x INT,
+    loc_y INT,
+    loc_z INT,
+    heading INT,
+    amount INT,
+    respawn_delay INT,
+    respawn_random INT,
+    respawn_time BIGINT,
+    currentHP DOUBLE,
+    currentMP DOUBLE
+);
+```
+
+### Loading System
+
+```java
+public void load() {
+    if (!_spawns.isEmpty()) {
+        for (Spawn spawn : _spawns.values()) {
+            deleteSpawn(spawn, false);
+        }
+    }
+    
+    _bosses.clear();
+    _spawns.clear();
+    _storedInfo.clear();
+    _schedules.clear();
+    
+    try (Connection con = DatabaseFactory.getConnection();
+        Statement s = con.createStatement();
+        ResultSet rs = s.executeQuery("SELECT * FROM raidboss_spawnlist ORDER BY boss_id")
+    ) {
+        while (rs.next()) {
+            final Spawn spawnDat = new Spawn(rs.getInt("boss_id"));
+            spawnDat.setXYZ(rs.getInt("loc_x"), rs.getInt("loc_y"), rs.getInt("loc_z"));
+            spawnDat.setAmount(rs.getInt("amount"));
+            spawnDat.setHeading(rs.getInt("heading"));
+            spawnDat.setRespawnDelay(
+                rs.getInt("respawn_delay"), 
+                rs.getInt("respawn_random")
+            );
+            addNewSpawn(
+                spawnDat, 
+                rs.getLong("respawn_time"), 
+                rs.getDouble("currentHP"), 
+                rs.getDouble("currentMP"), 
+                false
+            );
+        }
+        
+        LOGGER.info(getClass().getSimpleName() + ": Loaded " + _bosses.size() + " Instances");
+        LOGGER.info(getClass().getSimpleName() + ": Scheduled " + _schedules.size() + " Instances");
+    }
+}
+```
+
+**Source**: `RaidBossSpawnManager.java:66-106`
+
+## Respawn System
+
+### Dynamic Respawn Calculation
+
+```java
+public void updateStatus(RaidBoss boss, boolean isBossDead) {
+    final StatSet info = _storedInfo.get(boss.getId());
+    if (info == null) return;
+    
+    if (isBossDead) {
+        boss.setRaidStatus(RaidBossStatus.DEAD);
+        
+        final int respawnMinDelay = (int) (
+            boss.getSpawn().getRespawnMinDelay() * NpcConfig.RAID_MIN_RESPAWN_MULTIPLIER
+        );
+        final int respawnMaxDelay = (int) (
+            boss.getSpawn().getRespawnMaxDelay() * NpcConfig.RAID_MAX_RESPAWN_MULTIPLIER
+        );
+        final int respawnDelay = Rnd.get(respawnMinDelay, respawnMaxDelay);
+        final long respawnTime = System.currentTimeMillis() + respawnDelay;
+        
+        info.set("currentHP", boss.getMaxHp());
+        info.set("currentMP", boss.getMaxMp());
+        info.set("respawnTime", respawnTime);
+        
+        if (!_schedules.containsKey(boss.getId()) && 
+            ((respawnMinDelay > 0) || (respawnMaxDelay > 0))
+        ) {
+            final Calendar time = Calendar.getInstance();
+            time.setTimeInMillis(respawnTime);
+            LOGGER.info(
+                getClass().getSimpleName() + ": Updated " + boss.getName() + 
+                " respawn time to " + time.getTime()
+            );
+            _schedules.put(
+                boss.getId(), 
+                ThreadPool.schedule(new SpawnSchedule(boss.getId()), respawnDelay)
+            );
+            updateDb();
+        }
+    } else {
+        boss.setRaidStatus(RaidBossStatus.ALIVE);
+        
+        info.set("currentHP", boss.getCurrentHp());
+        info.set("currentMP", boss.getCurrentMp());
+        info.set("respawnTime", 0);
+    }
+    
+    _storedInfo.put(boss.getId(), info);
+}
+```
+
+**Source**: `RaidBossSpawnManager.java:150-188`
+
+### Respawn Multipliers
+
+Configurable via `NpcConfig`:
+
+```java
+RAID_MIN_RESPAWN_MULTIPLIER = 1.0  // 100% of base min time
+RAID_MAX_RESPAWN_MULTIPLIER = 1.0  // 100% of base max time
+```
+
+**Example**:
+- Base respawn: 36-48 hours
+- Min delay: `36 * 3600000 * 1.0 = 129600000ms`
+- Max delay: `48 * 3600000 * 1.0 = 172800000ms`
+- Actual: Random between 36-48 hours
+
+### Spawn Scheduling
+
+```java
+private static class SpawnSchedule implements Runnable {
+    private final int bossId;
+    
+    public SpawnSchedule(int npcId) {
+        bossId = npcId;
+    }
+    
+    @Override
+    public void run() {
+        final RaidBoss raidboss = (RaidBoss) _spawns.get(bossId).doSpawn();
+        if (raidboss != null) {
+            raidboss.setRaidStatus(RaidBossStatus.ALIVE);
+            
+            final StatSet info = new StatSet();
+            info.set("currentHP", raidboss.getCurrentHp());
+            info.set("currentMP", raidboss.getCurrentMp());
+            info.set("respawnTime", 0);
+            _storedInfo.put(bossId, info);
+            
+            LOGGER.info(
+                getClass().getSimpleName() + ": Spawning Raid Boss " + raidboss.getName()
+            );
+            _bosses.put(bossId, raidboss);
+        }
+        
+        _schedules.remove(bossId);
+    }
+}
+```
+
+**Source**: `RaidBossSpawnManager.java:108-143`
+
+## Raid Boss Status
+
+Three possible states:
+
+```java
+public enum RaidBossStatus {
+    ALIVE,
+    DEAD,
+    UNDEFINED
+}
+```
+
+**Status Management**:
+```java
+public void setRaidStatus(RaidBossStatus status) {
+    _raidStatus = status;
+}
+```
+
+## Raid Points System
+
+### RaidBossPointsManager
+
+Tracks points earned from raid boss kills:
+
+```java
+public class RaidBossPointsManager {
+    private final Map<Integer, Map<Integer, Integer>> _playerPoints = new ConcurrentHashMap<>();
+    
+    public void addPoints(Player player, int bossId, int points) {
+        final int playerId = player.getObjectId();
+        _playerPoints.computeIfAbsent(playerId, k -> new ConcurrentHashMap<>())
+            .merge(bossId, points, Integer::sum);
+    }
+    
+    public int getPlayerPoints(int playerId) {
+        return _playerPoints.getOrDefault(playerId, Collections.emptyMap())
+            .values().stream().mapToInt(Integer::intValue).sum();
+    }
+}
+```
+
+### Point Rewards
+
+**Calculation**:
+- Base points = Boss level × multiplier
+- Damage contribution bonus
+- Clan reputation conversion
+
+**Usage**:
+- Trade for special items
+- Clan reputation contribution
+- Leaderboard rankings
+
+## Configuration
+
+### Raid Boss Settings (NpcConfig.java)
+
+```ini
+# Respawn Multipliers
+RaidMinRespawnMultiplier = 1.0
+RaidMaxRespawnMultiplier = 1.0
+
+# HP/MP Multipliers
+RaidHpMultiplier = 1.0
+RaidMpMultiplier = 1.0
+
+# Damage Multipliers
+RaidPDefenseMultiplier = 1.0
+RaidMDefenseMultiplier = 1.0
+
+# Drop Rate Modifiers
+RaidDropRate = 1.0
+
+# Announce Settings
+AnnounceRaidBossSpawn = true
+AnnounceRaidBossDeath = true
+```
+
+### Custom Spawn Configuration
+
+Add to `raidboss_spawnlist`:
+
+```sql
+INSERT INTO raidboss_spawnlist (
+    boss_id, loc_x, loc_y, loc_z, heading, amount, 
+    respawn_delay, respawn_random, respawn_time, currentHP, currentMP
+) VALUES (
+    29001,  -- Boss NPC ID
+    12345,  -- X coordinate
+    67890,  -- Y coordinate
+    -2500,  -- Z coordinate  
+    0,      -- Heading
+    1,      -- Amount (always 1 for raid bosses)
+    3600000,    -- Min respawn (1 hour in ms)
+    3600000,    -- Random respawn range
+    0,      -- Initial respawn time (0 = spawn immediately)
+    100000, -- Current HP (or max HP)
+    5000    -- Current MP (or max MP)
+);
+```
+
+## Drop System
+
+### Raid-Specific Drops
+
+- **Epic Items**: Unique equipment (rings, necklaces, earrings)
+- **Recipes**: High-grade crafting recipes
+- **Materials**: Rare crafting components
+- **Scrolls**: Enchant and special ability scrolls
+
+### Drop Calculation
+
+Factors affecting drops:
+- Boss level
+- Kill contribution (damage dealt)
+- Party/alliance distribution
+- Server drop rate modifiers
+- Lucky bonus chances
+
+## Instancing
+
+<Warning>
+  Epic raid bosses (Antharas, Valakas, Baium) typically use instanced encounters to prevent spawn camping and ensure fair access.
+</Warning>
+
+### Instance Entry Requirements
+
+- Party/alliance formation
+- Quest completion (boss-dependent)
+- Entry items or keys
+- Level restrictions
+- Cooldown timers
+
+## Strategy Tips
+
+### For Party Leaders
+
+1. **Composition**: Balanced tanks, healers, DPS
+2. **Communication**: Voice chat strongly recommended
+3. **Positioning**: Understand boss mechanics and safe zones
+4. **Resource Management**: Stock healing potions, resurrection scrolls
+
+### For DPS Classes
+
+1. **Focus Fire**: Coordinate targets (boss vs. minions)
+2. **Avoid AoE**: Learn boss attack patterns
+3. **Buff Maintenance**: Keep self-buffs active
+4. **Mana Conservation**: Long fights require resource management
+
+### For Tanks
+
+1. **Aggro Management**: Maintain boss attention
+2. **Cooldown Rotation**: Use defensive abilities strategically
+3. **Position Boss**: Face away from party to avoid cleave
+4. **Call Mechanics**: Warn party of incoming special attacks
+
+### For Healers
+
+1. **Mana Efficiency**: Don't overheal
+2. **Priority Targets**: Tank > DPS > self
+3. **Debuff Removal**: Cleanse critical debuffs immediately
+4. **Resurrection**: Keep scrolls ready for emergencies
+
+## Tracking Tools
+
+### Spawn Timers
+
+Many servers provide:
+- Web-based spawn trackers
+- In-game commands (`.raidboss`, `.boss`)
+- Discord bot integrations
+- Automated announcements
+
+### Point Rankings
+
+View top contributors:
+```java
+public List<Player> getTopPlayers(int count) {
+    return _playerPoints.entrySet().stream()
+        .sorted((e1, e2) -> Integer.compare(
+            getPlayerPoints(e2.getKey()), 
+            getPlayerPoints(e1.getKey())
+        ))
+        .limit(count)
+        .map(e -> World.getInstance().getPlayer(e.getKey()))
+        .filter(Objects::nonNull)
+        .collect(Collectors.toList());
+}
+```
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can I solo raid bosses?" icon="user">
+    Low-level raid bosses (25-40) can be soloed by well-geared high-level characters. Epic raids always require groups.
+  </Accordion>
+
+  <Accordion title="What happens if I disconnect during a raid?" icon="wifi-slash">
+    You lose your position in the instance. Some servers allow re-entry within a grace period.
+  </Accordion>
+
+  <Accordion title="How are drops distributed?" icon="gift">
+    Typically random distribution to eligible party/alliance members, or leader-based loot distribution.
+  </Accordion>
+
+  <Accordion title="Can raid bosses despawn?" icon="clock">
+    Yes, if not engaged within a certain time period or if all nearby players leave the area/instance.
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Clan System](/systems/clan-system) - Raid points boost clan reputation
+- [Seven Signs](/systems/seven-signs) - Lilith and Anakim as raid bosses
+- [Castle Siege](/systems/castle-siege) - Castle territories may have exclusive raid spawns
+
+## References
+
+- `RaidBossSpawnManager.java` - Spawn and respawn system
+- `RaidBossPointsManager.java` - Point tracking and rewards
+- `RaidBoss.java` - Boss instance class
+- `NpcConfig.java` - Raid boss configuration

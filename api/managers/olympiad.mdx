@@ -1,0 +1,407 @@
+---
+title: 'Olympiad System'
+description: 'Olympiad manager and competition system API reference'
+---
+
+## Overview
+
+The Olympiad system manages the competitive PvP arena system in L2J Mobius Chronicle 4. It handles player registration, match scheduling, rankings, ELO ratings, hero selection, and seasonal cycles.
+
+**Key Classes:**
+- `org.l2jmobius.gameserver.model.olympiad.Olympiad` - Main olympiad manager (singleton)
+- `org.l2jmobius.gameserver.model.olympiad.OlympiadManager` - Match coordination and stadium management
+- `org.l2jmobius.gameserver.model.olympiad.OlympiadGame` - Individual match logic
+
+## Olympiad Manager
+
+Location: `org.l2jmobius.gameserver.model.olympiad.Olympiad`
+
+### Singleton Pattern
+
+```java
+Olympiad olympiad = Olympiad.getInstance();
+```
+
+The Olympiad class uses the Holder pattern for thread-safe lazy initialization.
+
+### Key Methods
+
+#### Registration Management
+
+<ParamField path="registerNoble" type="boolean">
+  Registers a noble player for olympiad competition.
+  
+  ```java
+  public boolean registerNoble(Player noble, boolean classBased)
+  ```
+  
+  **Parameters:**
+  - `noble` - The player attempting to register
+  - `classBased` - True for class-based matches, false for non-classed
+  
+  **Returns:** `true` if registration successful, `false` otherwise
+  
+  **Requirements:**
+  - Player must be noble
+  - Must be in base class (no subclass)
+  - Inventory must be < 80% full
+  - Minimum 3 points (classed) or 5 points (non-classed)
+  - Must not be registered for events
+  - Competition period must be active
+</ParamField>
+
+<ParamField path="unRegisterNoble" type="boolean">
+  Unregisters a player from olympiad waiting list.
+  
+  ```java
+  public boolean unRegisterNoble(Player noble)
+  ```
+  
+  **Returns:** `true` if successfully unregistered
+</ParamField>
+
+<ParamField path="isRegistered" type="boolean">
+  Checks if a player is registered for olympiad.
+  
+  ```java
+  public boolean isRegistered(Player noble)
+  ```
+</ParamField>
+
+#### Match & Period Management
+
+<ParamField path="inCompPeriod" type="boolean">
+  Checks if currently in competition period.
+  
+  ```java
+  public boolean inCompPeriod()
+  ```
+  
+  **Returns:** `true` if competitions are running
+</ParamField>
+
+<ParamField path="isOlympiadEnd" type="boolean">
+  Checks if in validation period (not competition period).
+  
+  ```java
+  public boolean isOlympiadEnd()
+  ```
+  
+  **Returns:** `true` if period != 0 (validation mode)
+</ParamField>
+
+<ParamField path="getMillisToOlympiadEnd" type="long">
+  Gets milliseconds remaining until olympiad period ends.
+  
+  ```java
+  public long getMillisToOlympiadEnd()
+  ```
+</ParamField>
+
+#### Player Stats & Rankings
+
+<ParamField path="getNobleStats" type="StatSet">
+  Retrieves a player's olympiad statistics.
+  
+  ```java
+  public static StatSet getNobleStats(int playerId)
+  ```
+  
+  **Returns:** StatSet containing:
+  - `olympiad_points` - Current olympiad points
+  - `competitions_done` - Total matches played
+  - `competitions_won` - Matches won
+  - `competitions_lost` - Matches lost
+  - `competitions_drawn` - Matches drawn
+  - `elo` - ELO rating
+  - `class_id` - Player's class ID
+  - `char_name` - Player name
+</ParamField>
+
+<ParamField path="getNoblePoints" type="int">
+  Gets a player's current olympiad points.
+  
+  ```java
+  public int getNoblePoints(int objId)
+  ```
+</ParamField>
+
+<ParamField path="getNobleElo" type="int">
+  Gets a player's ELO rating.
+  
+  ```java
+  public static int getNobleElo(int charId)
+  ```
+  
+  **Returns:** ELO rating or initial value if player not found
+</ParamField>
+
+<ParamField path="getCompetitionDone" type="int">
+  Gets number of competitions completed.
+  
+  ```java
+  public int getCompetitionDone(int objId)
+  ```
+</ParamField>
+
+#### Spectator Management
+
+<ParamField path="addSpectator" type="void">
+  Adds a spectator to an olympiad match.
+  
+  ```java
+  public static void addSpectator(int id, Player spectator, boolean storeCoords)
+  ```
+  
+  **Parameters:**
+  - `id` - Stadium/game ID (0-21)
+  - `spectator` - Player to add as spectator
+  - `storeCoords` - Whether to store original coordinates
+</ParamField>
+
+<ParamField path="removeSpectator" type="void">
+  Removes a spectator from an olympiad stadium.
+  
+  ```java
+  public static void removeSpectator(int id, Player spectator)
+  ```
+</ParamField>
+
+<ParamField path="getSpectatorArena" type="int">
+  Gets the arena ID where a player is spectating.
+  
+  ```java
+  public static int getSpectatorArena(Player player)
+  ```
+  
+  **Returns:** Arena ID or -1 if not spectating
+</ParamField>
+
+### ELO & Division System
+
+#### Division Calculation
+
+```java
+public static String getDivision(int elo)
+```
+
+**Division Thresholds:**
+- **Bronze**: ELO < 1100
+- **Silver**: 1100 ≤ ELO < 1300
+- **Gold**: 1300 ≤ ELO < 1500
+- **Platinum**: 1500 ≤ ELO < 1800
+- **Diamond**: ELO ≥ 1800
+
+#### Division Colors
+
+```java
+public static int getDivisionColor(int elo)
+```
+
+**Returns:**
+- Bronze: `0x808080` (Gray)
+- Silver: `0xFFFFFF` (White)
+- Gold: `0xFFFF00` (Yellow)
+- Platinum: `0x00FFFF` (Cyan)
+- Diamond: `0xFF00FF` (Magenta)
+
+### Period Management
+
+The Olympiad operates in two periods:
+
+**Period 0 - Competition Period:**
+- Players can register and compete
+- Matches run on configured days/times
+- Points earned from victories
+- Weekly bonus points distributed
+
+**Period 1 - Validation Period:**
+- 24-hour period after competition ends
+- Heroes selected from top players
+- Rankings finalized
+- Rewards calculated and distributed
+
+### Season System
+
+<ParamField path="getCurrentCycle" type="int">
+  Gets the current olympiad cycle number.
+  
+  ```java
+  public int getCurrentCycle()
+  ```
+</ParamField>
+
+<ParamField path="getCurrentSeason" type="int">
+  Gets the current olympiad season.
+  
+  ```java
+  public int getCurrentSeason()
+  ```
+</ParamField>
+
+### Data Persistence
+
+<ParamField path="saveOlympiadStatus" type="void">
+  Saves current olympiad state to database.
+  
+  ```java
+  public void saveOlympiadStatus()
+  ```
+  
+  Saves:
+  - Current cycle and period
+  - Olympiad/validation end times
+  - All noble player data (points, wins, losses, ELO)
+</ParamField>
+
+## OlympiadManager
+
+Location: `org.l2jmobius.gameserver.model.olympiad.OlympiadManager`
+
+### Stadium Management
+
+**Stadium Count:** 22 stadiums (STADIUMS array)
+
+```java
+OlympiadStadium[] stadiums = OlympiadManager.STADIUMS;
+```
+
+**Stadium Coordinates Example:**
+```java
+STADIUMS[0] = new OlympiadStadium(-20814, -21189, -3030);
+STADIUMS[1] = new OlympiadStadium(-120324, -225077, -3331);
+// ... total 22 stadiums
+```
+
+### Match Scheduling
+
+The OlympiadManager implements `Runnable` and manages:
+- Match queue creation based on registered players
+- ELO-based matchmaking
+- Stadium allocation
+- Game thread execution
+
+#### Matchmaking Algorithm
+
+```java
+protected List<Player> nextOpponents(List<Player> list)
+```
+
+**Process:**
+1. Sort players by ELO (descending)
+2. Select highest ELO player
+3. Pick opponent from top 5 or 20% of list (whichever is smaller)
+4. Randomize selection within scope for variety
+
+### Game Instance Management
+
+<ParamField path="getOlympiadGame" type="OlympiadGame">
+  Retrieves an olympiad game by stadium ID.
+  
+  ```java
+  protected OlympiadGame getOlympiadGame(int index)
+  ```
+</ParamField>
+
+<ParamField path="getOlympiadGames" type="Map<Integer, OlympiadGame>">
+  Gets all active olympiad games.
+  
+  ```java
+  protected Map<Integer, OlympiadGame> getOlympiadGames()
+  ```
+</ParamField>
+
+## Configuration Constants
+
+### Database Constants
+
+```java
+public static final String CHAR_ID = "charId";
+public static final String CLASS_ID = "class_id";
+public static final String CHAR_NAME = "char_name";
+public static final String POINTS = "olympiad_points";
+public static final String COMP_DONE = "competitions_done";
+public static final String COMP_WON = "competitions_won";
+public static final String COMP_LOST = "competitions_lost";
+public static final String COMP_DRAWN = "competitions_drawn";
+public static final String ELO = "elo";
+```
+
+### Division Constants
+
+```java
+public static final String DIV_BRONZE = "BRONZE";
+public static final String DIV_SILVER = "SILVER";
+public static final String DIV_GOLD = "GOLD";
+public static final String DIV_PLATINUM = "PLATINUM";
+public static final String DIV_DIAMOND = "DIAMOND";
+```
+
+## Usage Examples
+
+### Register Player for Olympiad
+
+```java
+Player player = ...; // Get player instance
+Olympiad olympiad = Olympiad.getInstance();
+
+if (olympiad.inCompPeriod()) {
+    boolean registered = olympiad.registerNoble(player, true); // Class-based
+    if (registered) {
+        player.sendMessage("Successfully registered for olympiad!");
+    }
+}
+```
+
+### Check Player Stats
+
+```java
+int playerId = player.getObjectId();
+StatSet stats = Olympiad.getNobleStats(playerId);
+
+if (stats != null) {
+    int points = stats.getInt(Olympiad.POINTS);
+    int elo = stats.getInt(Olympiad.ELO);
+    int wins = stats.getInt(Olympiad.COMP_WON);
+    int losses = stats.getInt(Olympiad.COMP_LOST);
+    String division = Olympiad.getDivision(elo);
+    
+    player.sendMessage("Points: " + points + " | ELO: " + elo + " | Division: " + division);
+    player.sendMessage("Record: " + wins + "W - " + losses + "L");
+}
+```
+
+### Add Spectator to Match
+
+```java
+int arenaId = 0; // First arena
+Player spectator = ...;
+
+if (Olympiad.getInstance().inCompPeriod()) {
+    Olympiad.addSpectator(arenaId, spectator, true);
+}
+```
+
+### Get Active Matches
+
+```java
+Map<Integer, String> matches = Olympiad.getInstance().getMatchList();
+
+for (Map.Entry<Integer, String> entry : matches.entrySet()) {
+    int arenaId = entry.getKey();
+    String matchInfo = entry.getValue(); // "PlayerA vs PlayerB"
+    System.out.println("Arena " + arenaId + ": " + matchInfo);
+}
+```
+
+## Related Systems
+
+- **Hero System** (`org.l2jmobius.gameserver.model.olympiad.Hero`) - Manages hero selection and rewards
+- **AntiFeedManager** - Prevents dual-boxing and match manipulation
+- **ZoneManager** - Manages olympiad stadium zones
+- **OlympiadConfig** - Configuration values for the system
+
+## Source Reference
+
+- Source: `java/org/l2jmobius/gameserver/model/olympiad/Olympiad.java:58`
+- Source: `java/org/l2jmobius/gameserver/model/olympiad/OlympiadManager.java:34`

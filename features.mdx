@@ -1,0 +1,574 @@
+---
+title: Key Features
+description: Comprehensive overview of L2J Mobius Chronicle 4 features and systems
+---
+
+# Server Features
+
+L2J Mobius Chronicle 4 combines authentic Chronicle 4 gameplay with modern enhancements and stability improvements. This page details the major features and systems available.
+
+## Core Chronicle 4 Features
+
+### Olympiad & Hero System
+
+An advanced competitive PvP system with ELO-based matchmaking.
+
+<Note>
+  L2J Mobius implements a sophisticated **ELO rating system** for fair matchmaking, going beyond retail-like mechanics.
+</Note>
+
+**Key Features:**
+- **ELO-Based Ranking**: Players are matched based on skill rating, not just wins/losses
+- **Anti-Feeding Protection**: Matches with ELO difference >400 award no points
+- **Dynamic Rewards**: Gate Pass rewards scale with average participant ELO
+- **Thread-Safe Registration**: Concurrent player registration without race conditions
+- **Class-Based & Non-Classed**: Separate queues for balanced competition
+
+**Configuration** (`config/Olympiad.ini`):
+
+```ini Olympiad.ini
+# Enable Olympiad system
+OlympiadEnabled = True
+
+# Competition schedule (default: 6 hours starting at 18:00)
+OlympiadStartTime = 18
+OlympiadCPeriod = 21600000
+
+# Battle duration (6 minutes)
+OlympiadBattle = 360000
+
+# Starting points for new nobles
+OlympiadStartPoints = 18
+OlympiadWeeklyPoints = 3
+
+# Minimum participants required
+OlympiadClassedParticipants = 5
+OlympiadNonClassedParticipants = 9
+
+# Battle rewards (itemId 6651 = Gate Pass)
+OlympiadBattleRewItem = 6651
+OlympiadClassedRewItemCount = 50
+OlympiadNonClassedRewItemCount = 30
+```
+
+**ELO Formula:**
+
+```java
+ELO_new = ELO_current + K × (ActualResult - ExpectedResult)
+
+ExpectedResult = 1 / (1 + 10^((ELO_opponent - ELO_player) / 400))
+
+K_Factor = 32 (configurable via OLYMPIAD_ELO_K_FACTOR)
+```
+
+**Hero Selection**: Top-ranked players in each class at season end become Heroes with:
+- Special hero aura and glow
+- Access to hero skills and weapons
+- Hero chat channel access
+- Noblesse points rewards
+
+### Seven Signs
+
+The epic territory control system where players choose between Dawn and Dusk factions.
+
+- **Seal Contests**: Control over Avarice, Gnosis, and Strife
+- **Catacomb Access**: Special dungeons based on winning faction
+- **Mammon NPCs**: Exclusive merchants for Ancient Adena items
+- **Weekly Cycles**: Strategic gameplay across recruitment, competition, and seal validation
+
+### Noblesse System
+
+Achieve nobility through the Subclass Quest chain:
+
+- Required for Olympiad participation
+- Unlocks Gate Pass teleportation
+- Access to exclusive skills
+- Hero system eligibility
+- Special visual effects
+
+### Subclass System
+
+Multi-class character progression:
+
+- Up to **3 subclasses** per character
+- Level each subclass independently
+- Retain main class skills when switching
+- Shared equipment across classes
+- Strategic builds for different combat roles
+
+### Epic Raid Bosses
+
+Challenge the most powerful foes in Chronicle 4:
+
+**Available Raid Bosses:**
+- **Valakas** (Fire Dragon) - Level 85
+- **Antharas** (Earth Dragon) - Level 79
+- **Baium** (Fallen Angel) - Level 75
+- **Zaken** (Undead Pirate) - Level 60
+- **Queen Ant** (Insect Queen) - Level 40
+- **Core** (Golem Guardian) - Level 50
+- **Orfen** (Wizard) - Level 50
+- **Anakim & Lilith** (Angels) - Level 80
+
+**Configuration** (`config/GrandBoss.ini`):
+
+```ini GrandBoss.ini
+# Spawn intervals (in hours)
+IntervalOfAntharasSpawn = 192
+IntervalOfValakasSpawn = 264
+IntervalOfBaiumSpawn = 168
+
+# Random spawn time range (±hours)
+RandomOfAntharasSpawn = 145
+RandomOfValakasSpawn = 197
+RandomOfBaiumSpawn = 48
+```
+
+### Dimensional Rift
+
+Instanced dungeons with unique challenges:
+
+- Party-based content (2-9 players)
+- Multiple difficulty levels
+- Boss encounters with special rewards
+- Time-limited exploration
+- Fragmented dimension keys for entry
+
+### Skill Enchanting
+
+Enhance your abilities beyond their base power:
+
+- Enchant skills up to +30 levels
+- Increased damage, duration, or reduced cost
+- Requires enchant books specific to skill type
+- Chance-based system with safe/blessed books
+
+## Castle & Territory Features
+
+### Castle Siege System
+
+Compete for control of 9 major castles:
+
+**Available Castles:**
+- Gludio Castle
+- Dion Castle  
+- Giran Castle
+- Oren Castle
+- Aden Castle
+- Innadril Castle
+- Goddard Castle
+- Rune Castle
+- Schuttgart Castle
+
+**Siege Mechanics:**
+- Destroyable walls and gates with HP pools
+- Strategic trap placement
+- Throne room capture objective
+- Siege time restrictions (configurable hours)
+
+**Configuration** (`config/Feature.ini`):
+
+```ini Feature.ini
+# Siege Time rules - Which hours can change Castle Lords
+SiegeHourList = 16,20
+
+# Castle function costs (7-day periods)
+CastleTeleportFunctionFeeLvl1 = 1000
+CastleTeleportFunctionFeeLvl2 = 10000
+
+CastleSupportFeeLvl1 = 49000
+CastleSupportFeeLvl2 = 120000
+
+# Upgrade costs
+OuterDoorUpgradePriceLvl2 = 3000000
+WallUpgradePriceLvl2 = 1600000
+TrapUpgradePriceLvl1 = 3000000
+```
+
+**Castle Benefits:**
+- Tax collection from territory
+- Clan hall ownership privileges
+- Special buffs and teleports
+- Economic control over regions
+
+### Manor System
+
+Clan-based agricultural economy:
+
+- Plant seeds in castle territories
+- Harvest crops for profit
+- Supply castle with resources
+- Weekly crop cycles
+- Trade goods for rewards
+
+### Clan Halls
+
+Smaller territory holdings for clans:
+
+- 7-day function rental periods
+- Teleportation services
+- MP/HP regeneration buffs
+- Support magic access
+- Decorations and customization
+
+## Advanced Geodata System
+
+**Pathfinding Engine** (`config/GeoEngine.ini`):
+
+```ini GeoEngine.ini
+# Pathfinding options:
+# 0 = Disabled
+# 1 = Enabled using path node files
+# 2 = Enabled using geodata cells at runtime (recommended)
+PathFinding = 2
+
+# Advanced diagonal movement
+AdvancedDiagonalStrategy = True
+
+# Avoid obstructed paths
+AvoidObstructedPathNodes = True
+
+# LOS optimization passes
+MaxPostfilterPasses = 3
+```
+
+**Benefits:**
+- Accurate line-of-sight calculations
+- Realistic NPC/monster movement
+- Prevents exploits like shooting through walls
+- Optimized pathfinding with configurable weights
+- Smart obstacle avoidance
+
+## Custom Enhancement Features
+
+L2J Mobius includes 30+ optional custom features in the `config/Custom/` directory:
+
+### Champion Monsters
+
+Random monsters become powerful champions with enhanced rewards.
+
+**Configuration** (`Custom/ChampionMonsters.ini`):
+
+```ini ChampionMonsters.ini
+# Enable champion system
+ChampionEnable = True
+
+# 5% chance for monsters to become champions
+ChampionFrequency = 5
+
+# Visual indicator
+ChampionTitle = Champion
+ChampionAura = True
+
+# Level restrictions
+ChampionMinLevel = 20
+ChampionMaxLevel = 70
+
+# Stats multipliers
+ChampionHp = 5
+ChampionRewardsExpSp = 5.0
+ChampionRewardsChance = 5.0
+ChampionRewardsAmount = 5.0
+
+# Special reward (57 = Adena)
+ChampionRewardItems = 57,10000
+ChampionRewardHigherLvlItemChance = 100
+```
+
+**Features:**
+- Red aura visual effect
+- 5x HP multiplier
+- 5x EXP/SP rewards
+- 5x item drop chance and amount
+- Bonus Adena rewards
+- Optional passive behavior
+
+### Offline Trading
+
+Players can maintain shops while offline.
+
+**Configuration** (`Custom/OfflineTrade.ini`):
+
+```ini OfflineTrade.ini
+# Enable offline trade/craft
+OfflineTradeEnable = True
+OfflineCraftEnable = True
+
+# Safety restrictions
+OfflineModeInPeaceZone = True
+OfflineModeNoDamage = True
+
+# Visual customization
+OfflineSetNameColor = True
+OfflineNameColor = 808080
+
+# Persistence
+RestoreOffliners = True
+OfflineMaxDays = 3
+
+# Disconnect when finished
+OfflineDisconnectFinished = True
+
+# Real-time transaction logging
+StoreOfflineTradeInRealtime = True
+
+# Enable .offline command
+EnableOfflineCommand = True
+```
+
+**Features:**
+- Shops persist through server restarts (up to 3 days)
+- Must be in peace zones
+- Invulnerable while offline
+- Gray name color indicator
+- Real-time transaction tracking
+- `.offline` command for quick logout
+
+### Auto-Play System
+
+Assisted gameplay for grinding.
+
+- Auto-targeting nearby monsters
+- Automatic skill usage
+- Looting and item pickup
+- Configurable target filters
+- Anti-AFK measures compatible
+
+### Dualbox Protection
+
+Prevent multi-client abuse:
+
+- Limit simultaneous connections per IP/HWID
+- Olympiad restrictions (1 window only)
+- Event participation limits
+- Configurable allowed boxes per activity
+
+### Faction System
+
+PvP-focused team system:
+
+- Join Good or Evil faction
+- Faction-specific quests
+- Territory control battles
+- Reward currency system
+- Team-based PvP rewards
+
+### Community Board Enhancements
+
+- Enhanced mail system
+- Friends list management  
+- Clan search functionality
+- Server statistics display
+- Player rankings
+- Market listings
+
+### Premium System
+
+VIP membership tiers:
+
+- Bonus EXP/SP rates
+- Enhanced drop rates
+- Exclusive skills
+- Teleportation privileges
+- Storage expansions
+
+### Other Custom Features
+
+<CardGroup cols={2}>
+  <Card title="Banking System" icon="piggy-bank">
+    In-game banking with deposit/withdrawal and interest
+  </Card>
+  <Card title="Class Balance" icon="scale-balanced">
+    Fine-tune class stats for competitive balance
+  </Card>
+  <Card title="Boss Announcements" icon="megaphone">
+    Server-wide notifications for raid boss spawns
+  </Card>
+  <Card title="Captcha System" icon="shield">
+    Anti-bot verification for player activities
+  </Card>
+  <Card title="Chat Moderation" icon="comments">
+    Advanced chat filtering and moderation tools
+  </Card>
+  <Card title="Delevel Manager" icon="arrow-down">
+    Allow players to reduce their level
+  </Card>
+  <Card title="Fake Players" icon="users">
+    NPC players to populate the world
+  </Card>
+  <Card title="Find PVP" icon="crosshairs">
+    Teleport to active PvP zones
+  </Card>
+  <Card title="Free Mounts" icon="horse">
+    Complimentary mounts for all players
+  </Card>
+  <Card title="Multilingual Support" icon="language">
+    Multiple language translations
+  </Card>
+  <Card title="NPC Stat Multipliers" icon="chart-line">
+    Adjust monster difficulty globally
+  </Card>
+  <Card title="Password Change" icon="key">
+    In-game password modification
+  </Card>
+</CardGroup>
+
+## Gameplay Systems
+
+### Fishing System
+
+Relaxing fishing mechanics:
+
+- Multiple fishing zones
+- Fishing shots for improved catch rates
+- Variety of fish types and rarities
+- Special fishing events
+- Fish trading for rewards
+
+### Clan Wars
+
+Declare war on rival clans:
+
+- Formal war declaration system
+- Honor-based PvP (no karma penalty)
+- War statistics tracking
+- Victory conditions and rewards
+
+### Boat System
+
+Ocean transportation:
+
+- Regular routes between towns
+- Talking Island ↔ Gludin
+- Giran ↔ Heine
+- Scheduled departures
+
+### Dye System
+
+Pattern-based stat customization:
+
+- STR, DEX, CON, INT, WIT, MEN dyes
+- Limited dye slots based on class
+- Strategic stat optimization
+- Removable and replaceable
+
+### Macro System
+
+Automate complex skill rotations:
+
+- 24 available macro slots
+- Command sequences
+- Conditional logic
+- Skill chains
+- Target management
+
+## Rate Configuration
+
+Fully customizable experience rates (`config/Rates.ini`):
+
+```ini Rates.ini
+# Base rates (retail = 1)
+RateXp = 5
+RateSp = 5
+RatePartyXp = 5
+RatePartySp = 5
+
+# Drop rates
+DeathDropChanceMultiplier = 5
+SpoilDropChanceMultiplier = 5
+RaidDropChanceMultiplier = 3
+
+# Per-item multipliers (itemId,multiplier)
+DropAmountMultiplierByItemId = 57,5;6656,1;6657,1
+
+# Quest rewards
+RateQuestRewardXP = 5
+RateQuestRewardSP = 5
+RateQuestRewardAdena = 5
+
+# Pet rates
+PetXpRate = 5
+PetFoodRate = 1
+
+# Vitality system
+RateVitalityLevel1 = 1.5
+RateVitalityLevel2 = 2.0
+RateVitalityLevel3 = 2.5
+RateVitalityLevel4 = 3.0
+```
+
+**Advanced Rate Features:**
+- Level difference penalty system
+- Per-item rate overrides  
+- Separate raid boss rates
+- Karma drop rate modifiers
+- Vitality bonus multipliers
+
+## Performance & Stability
+
+### Multi-threaded Architecture
+
+- Dedicated thread pools for:
+  - AI processing
+  - Scheduled tasks
+  - Packet handling
+  - Database operations
+
+**Configuration** (`config/Threads.ini`):
+
+```ini Threads.ini
+# Thread pool configuration for optimal performance
+ThreadPoolSizeGeneral = 15
+ThreadPoolSizeEffects = 10
+```
+
+### Deadlock Detection
+
+Automatic monitoring and recovery (`config/Server.ini`):
+
+```ini Server.ini
+DeadlockWatcher = True
+DeadlockCheckInterval = 20
+RestartOnDeadlock = False
+```
+
+### Database Connection Pooling
+
+```ini Database.ini
+MaximumDatabaseConnections = 500
+TestDatabaseConnections = False
+```
+
+### Flood Protection
+
+Packet spam prevention (`config/FloodProtector.ini`):
+
+- Use-item flood protection
+- Server-bypass flood protection  
+- Packet-per-second limits
+- Auto-kick on violation
+
+## Security Features
+
+- **HWID Tracking**: Hardware-based identification
+- **IP Restrictions**: Max players per IP address
+- **GM Audit Logging**: Track admin command usage
+- **Packet Encryption**: Secure client-server communication
+- **SQL Injection Protection**: Parameterized queries throughout
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Configuration Guide" icon="sliders" href="/setup/configuration">
+    Deep dive into all configuration options
+  </Card>
+  <Card title="Admin Commands" icon="terminal" href="/admin/commands">
+    Learn GM commands for server management
+  </Card>
+  <Card title="Customization" icon="code" href="/scripting/overview">
+    Modify scripts, add content, and extend features
+  </Card>
+  <Card title="API Reference" icon="book" href="/api/game-server">
+    Java API documentation for developers
+  </Card>
+</CardGroup>

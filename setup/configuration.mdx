@@ -1,0 +1,672 @@
+---
+title: 'Configuration Overview'
+description: 'Complete guide to L2J Mobius Chronicle 4 configuration files, important settings, and environment variables'
+---
+
+## Configuration Structure
+
+L2J Mobius Chronicle 4 uses INI and XML configuration files organized by function:
+
+```
+dist/
+├── game/config/          # GameServer configurations
+│   ├── Server.ini        # Core server settings
+│   ├── Database.ini      # Database connection
+│   ├── Network.ini       # Network & DDoS protection
+│   ├── Threads.ini       # Thread pool settings
+│   ├── General.ini       # General gameplay settings
+│   ├── Rates.ini         # XP/SP/Drop rates
+│   ├── Player.ini        # Player configurations
+│   ├── NPC.ini          # NPC behavior
+│   ├── Feature.ini       # Feature toggles
+│   ├── Olympiad.ini     # Olympiad system
+│   ├── Siege.ini        # Castle sieges
+│   ├── GeoEngine.ini    # Geodata settings
+│   ├── FloodProtector.ini # Anti-flood protection
+│   ├── ipconfig.xml     # IP/subnet configuration
+│   └── Custom/          # Custom modifications
+├── login/config/         # LoginServer configurations
+│   ├── Server.ini       # Login server settings
+│   ├── Database.ini     # Database connection
+│   └── Threads.ini      # Thread pool settings
+└── db_installer/config/  # Database installer settings
+    └── Database.ini     # DB connection for installer
+```
+
+## Core Configuration Files
+
+### Server Configuration
+
+<Tabs>
+  <Tab title="GameServer">
+    **File:** `game/config/Server.ini`
+
+    Key settings from `game/config/Server.ini`:
+
+    ```ini
+    # Network settings
+    LoginHost = 127.0.0.1
+    LoginPort = 9014
+    GameserverHostname = 0.0.0.0
+    GameserverPort = 7777
+
+    # Server identity
+    RequestServerID = 1
+    AcceptAlternateID = True
+    MaximumOnlineUsers = 3500
+    AllowedProtocolRevisions = 656;660
+
+    # Server list display
+    ServerListType = Free
+    ServerListAge = 0
+    ServerListBrackets = False
+    ServerListClock = False
+
+    # Paths
+    DatapackRoot = .
+    ScriptRoot = ./data/scripts
+
+    # Monitoring
+    DeadlockWatcher = True
+    DeadlockCheckInterval = 20
+    RestartOnDeadlock = False
+
+    # Precautionary restart
+    PrecautionaryRestartEnabled = False
+    PrecautionaryRestartPercentage = 95
+    PrecautionaryRestartDelay = 60
+
+    # Scheduled restart
+    ServerRestartScheduleEnabled = False
+    ServerRestartSchedule = 08:00
+    ServerRestartDays = 4
+    ```
+  </Tab>
+  <Tab title="LoginServer">
+    **File:** `login/config/Server.ini`
+
+    Key settings from `login/config/Server.ini`:
+
+    ```ini
+    # Network settings
+    LoginserverHostname = 0.0.0.0
+    LoginserverPort = 2106
+    LoginHostname = 127.0.0.1
+    LoginPort = 9014
+
+    # Thread configuration
+    ScheduledThreadPoolSize = 2
+    InstantThreadPoolSize = 2
+
+    # Security
+    LoginTryBeforeBan = 5
+    LoginBlockAfterBan = 900
+    AcceptNewGameServer = True
+
+    # Flood protection
+    EnableFloodProtection = True
+    FastConnectionLimit = 15
+    NormalConnectionTime = 700
+    FastConnectionTime = 350
+    MaxConnectionPerIP = 50
+
+    # Account management
+    AutoCreateAccounts = True
+    ShowLicence = True
+
+    # Scheduled restart
+    LoginRestartSchedule = False
+    LoginRestartTime = 24
+    ```
+  </Tab>
+</Tabs>
+
+### Database Configuration
+
+<CodeGroup>
+```ini game/config/Database.ini
+# Database driver
+Driver = com.mysql.cj.jdbc.Driver
+
+# Connection URL
+URL = jdbc:mysql://localhost/l2jmobiusc4?useUnicode=true&characterEncoding=utf-8&allowPublicKeyRetrieval=true&useSSL=false&connectTimeout=10000&interactiveClient=true&sessionVariables=wait_timeout=600,interactive_timeout=600&autoReconnect=true
+
+# Credentials
+Login = root
+Password = 
+
+# Connection pool (GameServer needs more)
+MaximumDatabaseConnections = 500
+TestDatabaseConnections = False
+
+# Automatic backups
+BackupDatabase = False
+MySqlBinLocation = C:/xampp/mysql/bin/
+BackupPath = ../backup/
+BackupDays = 30
+```
+
+```ini login/config/Database.ini
+# Database driver (same as GameServer)
+Driver = com.mysql.cj.jdbc.Driver
+
+# Connection URL (same database)
+URL = jdbc:mysql://localhost/l2jmobiusc4?useUnicode=true&characterEncoding=utf-8&allowPublicKeyRetrieval=true&useSSL=false&connectTimeout=10000&interactiveClient=true&sessionVariables=wait_timeout=600,interactive_timeout=600&autoReconnect=true
+
+# Credentials (same as GameServer)
+Login = root
+Password = 
+
+# Connection pool (LoginServer needs fewer)
+MaximumDatabaseConnections = 5
+TestDatabaseConnections = False
+```
+</CodeGroup>
+
+<Warning>
+  Both servers **must** use the same database (`l2jmobiusc4`) with identical credentials.
+</Warning>
+
+## Network Configuration
+
+### Network Protection
+
+**File:** `game/config/Network.ini`
+
+Advanced network settings from `game/config/Network.ini`:
+
+```ini
+# ---------------------------------------------------------------------------
+# DDoS Protection
+# ---------------------------------------------------------------------------
+
+# Maximum connections per IP
+MaxConnectionsPerIP = 10
+
+# Minimum time between connections (ms)
+MinConnectionInterval = 1000
+
+# Maximum packets per second per client
+MaxPacketsPerSecond = 80
+
+# Maximum bytes per second per client (50 KB/s default)
+MaxBytesPerSecond = 102400
+
+# Maximum concurrent virtual threads
+MaxVirtualThreads = 5000
+
+# ---------------------------------------------------------------------------
+# Packet Management
+# ---------------------------------------------------------------------------
+
+# Enable packet dropping under load
+DropPackets = True
+
+# Queue threshold before dropping
+DropPacketThreshold = 5000
+
+# Shutdown wait time (seconds)
+ShutdownWaitTime = 5
+
+# ---------------------------------------------------------------------------
+# Thread Pool
+# ---------------------------------------------------------------------------
+
+# Thread pool size (0 = CPU cores × 4)
+ThreadPoolSize = 8
+
+# Thread priority (1-10)
+ThreadPriority = 5
+
+# ---------------------------------------------------------------------------
+# Buffer Pools
+# ---------------------------------------------------------------------------
+
+# Segment size for dynamic buffers
+BufferSegmentSize = 64
+
+# Auto-expand buffer pool capacity
+BufferPool.AutoExpandCapacity = True
+
+# Pre-initialization factor
+BufferPool.InitFactor = 2
+
+# Pool sizes and buffer sizes
+BufferPool.Empty.Size = 200
+BufferPool.Empty.BufferSize = 2
+
+BufferPool.Small.Size = 150
+BufferPool.Small.BufferSize = 256
+
+BufferPool.Medium.Size = 100
+BufferPool.Medium.BufferSize = 2048
+
+BufferPool.Large.Size = 50
+BufferPool.Large.BufferSize = 16384
+
+BufferPool.Maximum.Size = 25
+BufferPool.Maximum.BufferSize = 32768
+```
+
+### IP Configuration
+
+**File:** `game/config/ipconfig.xml`
+
+From `game/config/default-ipconfig.xml:1-13`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Rename to ipconfig.xml to activate -->
+<gameserver address="YOUR_PUBLIC_IP" 
+            xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+            xsi:noNamespaceSchemaLocation="../data/xsd/ipconfig.xsd">
+  
+  <!-- Localhost -->
+  <define subnet="127.0.0.0/8" address="127.0.0.1" />
+  
+  <!-- Internal network (adjust to your LAN) -->
+  <define subnet="10.0.0.0/8" address="10.0.0.0" />
+  <define subnet="172.16.0.0/19" address="172.16.0.0" />
+  <define subnet="192.168.0.0/16" address="192.168.0.0" />
+  
+</gameserver>
+```
+
+<Info>
+  Rename `default-ipconfig.xml` to `ipconfig.xml` and set your public IP in the `address` attribute.
+</Info>
+
+## Thread Configuration
+
+<CodeGroup>
+```ini game/config/Threads.ini
+# Scheduled thread pool
+# -1 = auto (CPU cores × 4)
+ScheduledThreadPoolSize = 32
+
+# Instant thread pool
+# -1 = auto (CPU cores × 2)
+InstantThreadPoolSize = 32
+
+# Use threading for faster startup
+ThreadsForLoading = True
+```
+
+```ini login/config/Threads.ini
+# Scheduled thread pool
+# -1 = auto (CPU cores / 2)
+ScheduledThreadPoolSize = 2
+
+# Instant thread pool
+# -1 = auto (CPU cores / 2)
+InstantThreadPoolSize = 2
+```
+</CodeGroup>
+
+## Gameplay Configuration
+
+### Rate Settings
+
+**File:** `game/config/Rates.ini`
+
+Key rates from `game/config/Rates.ini:13-56`:
+
+```ini
+# Experience and SP multipliers
+RateXp = 5
+RateSp = 5
+RatePartyXp = 5
+RatePartySp = 5
+
+# Karma rates
+RateKarmaLost = -1  # -1 uses RateXp
+RateKarmaExpLost = 1
+
+# Extractables (soul crystals, etc.)
+RateExtractable = 1
+
+# Quest rewards
+QuestItemDropAmountMultiplier = 5
+RateQuestRewardXP = 5
+RateQuestRewardSP = 5
+RateQuestRewardAdena = 5
+
+# Item-type specific quest rewards
+UseQuestRewardMultipliers = False
+RateQuestReward = 5
+RateQuestRewardPotion = 5
+RateQuestRewardScroll = 5
+RateQuestRewardRecipe = 5
+```
+
+### General Settings
+
+**File:** `game/config/General.ini`
+
+Important settings from `game/config/General.ini:14-96`:
+
+```ini
+# Administrator settings
+EverybodyHasAdminRights = False
+ServerGMOnly = False
+TestServer = False
+
+# GM startup settings
+GMStartupBuilderHide = True
+GMStartupInvulnerable = True
+GMStartupInvisible = True
+GMStartupSilence = False
+GMStartupAutoList = False
+
+# GM restrictions
+GMItemRestriction = True
+GMSkillRestriction = True
+GMTradeRestrictedItems = False
+GMRestartFighting = True
+```
+
+### Feature Toggles
+
+**File:** `game/config/Feature.ini`
+
+Enable/disable game features:
+
+```ini
+# Chronicle 4 features
+EnableOlympiad = True
+EnableSevenSigns = True
+EnableDimensionalRift = True
+EnableFishing = True
+EnableManor = True
+EnableBoats = True
+```
+
+## JVM Configuration
+
+### Environment Variables
+
+<CodeGroup>
+```bash game/java.cfg
+# JVM flags for GameServer
+-server                          # Server mode JVM
+-Dfile.encoding=UTF-8           # Character encoding
+-Djava.util.logging.manager=org.l2jmobius.log.ServerLogManager
+-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn
+-XX:+UseZGC                     # ZGC garbage collector
+-Xmx32g                         # Maximum heap: 32GB
+-Xms16g                         # Initial heap: 16GB
+```
+
+```bash login/java.cfg
+# JVM flags for LoginServer
+-server                          # Server mode JVM
+-Dfile.encoding=UTF-8           # Character encoding
+-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn
+-XX:+UseZGC                     # ZGC garbage collector
+-Xms128m                        # Initial heap: 128MB
+-Xmx256m                        # Maximum heap: 256MB
+```
+</CodeGroup>
+
+### Memory Recommendations
+
+| Server Size | Players | GameServer Memory | LoginServer Memory |
+|-------------|---------|-------------------|--------------------|
+| Small | Under 100 | -Xmx4g -Xms2g | -Xmx128m -Xms64m |
+| Medium | 100-500 | -Xmx16g -Xms8g | -Xmx256m -Xms128m |
+| Large | 500-2000 | -Xmx32g -Xms16g | -Xmx512m -Xms256m |
+| Very Large | 2000+ | -Xmx64g -Xms32g | -Xmx1g -Xms512m |
+
+## Configuration Best Practices
+
+### Security
+
+<Steps>
+  <Step title="Database Security">
+    ```ini
+    # Create dedicated database user (not root)
+    Login = l2jmobius
+    Password = strong_random_password
+    ```
+
+    ```sql
+    -- Grant only necessary privileges
+    GRANT SELECT, INSERT, UPDATE, DELETE ON l2jmobiusc4.* TO 'l2jmobius'@'localhost';
+    ```
+  </Step>
+
+  <Step title="Disable Auto Account Creation">
+    For production servers:
+    ```ini
+    # login/config/Server.ini
+    AutoCreateAccounts = False
+    ```
+  </Step>
+
+  <Step title="Enable Flood Protection">
+    ```ini
+    # login/config/Server.ini
+    EnableFloodProtection = True
+    LoginTryBeforeBan = 5
+    LoginBlockAfterBan = 900
+    ```
+  </Step>
+
+  <Step title="Lock GameServer Registration">
+    After registering your GameServer:
+    ```ini
+    # login/config/Server.ini
+    AcceptNewGameServer = False
+    ```
+  </Step>
+</Steps>
+
+### Performance
+
+<Steps>
+  <Step title="Optimize Thread Pools">
+    Adjust based on CPU cores:
+    ```ini
+    # game/config/Threads.ini
+    # For 8-core CPU:
+    ScheduledThreadPoolSize = 32  # cores × 4
+    InstantThreadPoolSize = 16    # cores × 2
+    ```
+  </Step>
+
+  <Step title="Database Connection Pool">
+    ```ini
+    # game/config/Database.ini
+    # Adjust based on player count
+    MaximumDatabaseConnections = 500  # High population
+    ```
+  </Step>
+
+  <Step title="Network Buffer Pools">
+    Increase for high-population servers:
+    ```ini
+    # game/config/Network.ini
+    BufferPool.InitFactor = 2
+    DropPacketThreshold = 5000
+    ```
+  </Step>
+
+  <Step title="Enable Startup Threading">
+    ```ini
+    # game/config/Threads.ini
+    ThreadsForLoading = True
+    ```
+  </Step>
+</Steps>
+
+### Monitoring
+
+<Steps>
+  <Step title="Enable Deadlock Detection">
+    ```ini
+    # game/config/Server.ini
+    DeadlockWatcher = True
+    DeadlockCheckInterval = 20
+    ```
+  </Step>
+
+  <Step title="Configure Automatic Backups">
+    ```ini
+    # game/config/Database.ini
+    BackupDatabase = True
+    BackupPath = ../backup/
+    BackupDays = 30
+    ```
+  </Step>
+
+  <Step title="Set Up Scheduled Restarts">
+    ```ini
+    # game/config/Server.ini
+    ServerRestartScheduleEnabled = True
+    ServerRestartSchedule = 08:00
+    ServerRestartDays = 4  # Wednesday
+    ServerRestartScheduleCountdown = 600
+    ```
+  </Step>
+</Steps>
+
+## Configuration Management
+
+### Version Control
+
+Track configuration changes:
+
+```bash
+# Initialize git in config directories
+cd game/config
+git init
+git add *.ini *.xml
+git commit -m "Initial configuration"
+
+# Track changes
+git diff Database.ini
+git commit -am "Update database connection pool"
+```
+
+### Configuration Backup
+
+```bash
+# Backup all configurations
+tar -czf configs-$(date +%Y%m%d).tar.gz \
+  game/config/ \
+  login/config/ \
+  db_installer/config/
+
+# Restore from backup
+tar -xzf configs-20260303.tar.gz
+```
+
+### Environment-Specific Configs
+
+```bash
+# Maintain separate configs for different environments
+configs/
+├── development/
+│   ├── game/
+│   └── login/
+├── staging/
+│   ├── game/
+│   └── login/
+└── production/
+    ├── game/
+    └── login/
+
+# Deploy specific environment
+cp -r configs/production/* dist/
+```
+
+## Common Configuration Scenarios
+
+### High-Rate Server
+
+```ini
+# game/config/Rates.ini
+RateXp = 50
+RateSp = 50
+RateDropAdena = 10
+RateDropItems = 10
+```
+
+### Low-Rate (Retail-like) Server
+
+```ini
+# game/config/Rates.ini
+RateXp = 1
+RateSp = 1
+RateDropAdena = 1
+RateDropItems = 1
+```
+
+### Development Server
+
+```ini
+# game/config/General.ini
+EverybodyHasAdminRights = True
+TestServer = True
+
+# game/config/Server.ini
+ServerListType = Test
+ServerGMOnly = True
+```
+
+### High-Security Server
+
+```ini
+# login/config/Server.ini
+AutoCreateAccounts = False
+LoginTryBeforeBan = 3
+LoginBlockAfterBan = 1800
+AcceptNewGameServer = False
+MaxConnectionPerIP = 10
+
+# game/config/Network.ini
+MaxConnectionsPerIP = 5
+MaxPacketsPerSecond = 50
+```
+
+## Validation and Testing
+
+### Configuration Validation
+
+```bash
+# Check INI syntax
+grep -n "^[^#;]" game/config/*.ini | grep -v "="
+
+# Validate XML files
+xmllint --noout game/config/*.xml
+
+# Check for common issues
+grep -r "localhost" game/config/  # Should use ipconfig.xml
+grep -r "root" */config/Database.ini  # Avoid using root user
+```
+
+### Test Configuration
+
+```bash
+# Test database connection
+mysql -u $(grep "^Login" game/config/Database.ini | cut -d= -f2 | tr -d ' ') \
+      -p$(grep "^Password" game/config/Database.ini | cut -d= -f2 | tr -d ' ') \
+      $(grep "^URL" game/config/Database.ini | grep -o 'l2jmobiusc4') \
+      -e "SELECT 1;"
+
+# Test port availability
+netstat -tlnp | grep -E '(2106|7777|9014)'
+
+# Verify file permissions
+ls -la game/config/*.ini login/config/*.ini
+```
+
+## Next Steps
+
+After configuring your server:
+
+1. Start the [LoginServer](/setup/login-server#starting-the-loginserver)
+2. Start the [GameServer](/setup/game-server#starting-the-gameserver)
+3. Monitor server logs and health checks
+4. Test client connections
+5. Configure game-specific features

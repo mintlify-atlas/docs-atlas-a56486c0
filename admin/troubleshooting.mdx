@@ -1,0 +1,663 @@
+---
+title: 'Troubleshooting Guide'
+description: 'Common issues, solutions, and debugging techniques for L2J Mobius Chronicle 4'
+icon: 'wrench'
+---
+
+This guide covers common issues administrators encounter and provides step-by-step solutions for troubleshooting L2J Mobius Chronicle 4 servers.
+
+## Server Startup Issues
+
+<AccordionGroup>
+  <Accordion title="Server fails to start - Database connection error" icon="database">
+    **Symptoms:**
+    - Server crashes during startup
+    - Error: "Cannot connect to database"
+    - Connection timeout errors
+    
+    **Solutions:**
+    
+    1. **Verify database is running:**
+    ```bash
+    systemctl status mysql
+    # or
+    systemctl status mariadb
+    ```
+    
+    2. **Check database credentials in `dist/game/config/Database.ini`:**
+    ```ini
+    Driver = com.mysql.jdbc.Driver
+    URL = jdbc:mysql://localhost/l2jmobius
+    Login = root
+    Password = your_password
+    ```
+    
+    3. **Test database connection:**
+    ```bash
+    mysql -u root -p -e "SHOW DATABASES;"
+    ```
+    
+    4. **Verify database exists:**
+    ```sql
+    SHOW DATABASES LIKE 'l2jmobius';
+    ```
+    
+    5. **Check firewall rules:**
+    ```bash
+    sudo ufw allow 3306/tcp
+    ```
+    
+    <Warning>
+    Ensure database user has proper permissions on the L2J database.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="OutOfMemoryError during startup" icon="memory">
+    **Symptoms:**
+    - `java.lang.OutOfMemoryError: Java heap space`
+    - Server crashes while loading data
+    
+    **Solutions:**
+    
+    1. **Increase JVM heap size:**
+    ```bash
+    java -Xms2G -Xmx4G -jar L2J_Mobius_C4_ScionsOfDestiny.jar
+    ```
+    
+    2. **For larger servers, allocate more memory:**
+    ```bash
+    java -Xms4G -Xmx8G -XX:+UseG1GC -jar L2J_Mobius_C4_ScionsOfDestiny.jar
+    ```
+    
+    3. **Monitor memory usage:**
+    ```bash
+    //serverinfo
+    ```
+    
+    4. **Check for memory leaks:**
+    - Review `dist/game/log/error.log`
+    - Look for repetitive object creation
+    - Consider profiling with VisualVM
+  </Accordion>
+
+  <Accordion title="Port already in use" icon="network-wired">
+    **Symptoms:**
+    - `java.net.BindException: Address already in use`
+    - Cannot bind to port 7777 or 9014
+    
+    **Solutions:**
+    
+    1. **Check what's using the port:**
+    ```bash
+    sudo netstat -tulpn | grep :7777
+    sudo lsof -i :7777
+    ```
+    
+    2. **Kill the process:**
+    ```bash
+    sudo kill -9 <PID>
+    ```
+    
+    3. **Change server ports in `dist/game/config/Network.ini`:**
+    ```ini
+    GameServerPort = 7777
+    LoginServerPort = 9014
+    ```
+    
+    4. **Wait for port to be released:**
+    ```bash
+    # Ports may remain in TIME_WAIT state for up to 2 minutes
+    watch -n 1 'netstat -an | grep :7777'
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Admin Command Issues
+
+<AccordionGroup>
+  <Accordion title="Admin commands not working" icon="terminal">
+    **Symptoms:**
+    - Commands return "You don't have the access rights to use this command"
+    - Commands not recognized
+    
+    **Solutions:**
+    
+    1. **Verify access level:**
+    ```sql
+    SELECT char_name, accesslevel FROM characters WHERE char_name = 'YourGMName';
+    ```
+    
+    2. **Set access level in database:**
+    ```sql
+    UPDATE characters SET accesslevel = 70 WHERE char_name = 'YourGMName';
+    ```
+    
+    3. **Reload character or relog**
+    
+    4. **Check `dist/game/config/AccessLevels.xml`:**
+    ```xml
+    <access level="70" name="Admin" isGM="true" .../>
+    ```
+    
+    5. **Verify command exists in `dist/game/config/AdminCommands.xml`:**
+    ```xml
+    <command name="admin_teleport" accessLevel="30" />
+    ```
+    
+    6. **Check admin command handler is loaded:**
+    ```bash
+    //reload handler
+    ```
+    
+    **Source:** See [Access Levels](/admin/security#access-levels-overview)
+  </Accordion>
+
+  <Accordion title="Reload command warnings" icon="triangle-exclamation">
+    **Symptoms:**
+    - "WARNING: There are several known issues regarding this feature"
+    - Server instability after reload
+    
+    **Understanding the Issue:**
+    
+    Reloading server data at runtime can cause:
+    - Memory leaks
+    - Inconsistent game state
+    - Player disconnections
+    - Cache corruption
+    
+    **Best Practices:**
+    
+    <Warning>
+    Never use `//reload` commands on live production servers.
+    </Warning>
+    
+    **Safe reload operations (development only):**
+    - `//reload html` - Generally safe
+    - `//reload config` - Use with caution
+    - `//reload quest <id>` - Safe for single quest
+    
+    **Unsafe reload operations:**
+    - `//reload npc` - Can cause spawn issues
+    - `//reload skill` - May break active buffs
+    - `//reload item` - Can corrupt inventories
+    
+    **Alternative:** Restart server during low-traffic periods.
+    
+    **Source:** `handlers/admincommandhandlers/AdminReload.java:260`
+  </Accordion>
+</AccordionGroup>
+
+## Player Connection Issues
+
+<AccordionGroup>
+  <Accordion title="Players cannot connect to server" icon="plug">
+    **Symptoms:**
+    - "Server is currently unavailable"
+    - Timeout during connection
+    - Connection refused errors
+    
+    **Solutions:**
+    
+    1. **Verify server is running:**
+    ```bash
+    ps aux | grep L2J
+    netstat -tulpn | grep 7777
+    ```
+    
+    2. **Check firewall rules:**
+    ```bash
+    sudo ufw status
+    sudo ufw allow 7777/tcp
+    sudo ufw allow 9014/tcp
+    ```
+    
+    3. **Verify external IP configuration:**
+    
+    In `dist/game/config/Network.ini`:
+    ```ini
+    ExternalHostname = your.public.ip.address
+    InternalHostname = 127.0.0.1
+    ```
+    
+    4. **Test port accessibility:**
+    ```bash
+    telnet your.server.ip 7777
+    ```
+    
+    5. **Check NAT/port forwarding:**
+    - Forward port 7777 (game server)
+    - Forward port 9014 (login server)
+    
+    6. **Review connection logs:**
+    ```bash
+    tail -f dist/game/log/java.log | grep "Connection"
+    ```
+  </Accordion>
+
+  <Accordion title="Players getting kicked frequently" icon="right-from-bracket">
+    **Symptoms:**
+    - Random disconnections
+    - "Connection lost" errors
+    - Timeout messages
+    
+    **Solutions:**
+    
+    1. **Check flood protector settings in `dist/game/config/FloodProtector.ini`:**
+    ```ini
+    # May be too aggressive
+    PacketFloodProtector = True
+    PacketInterval = 100
+    PacketMaxAttempts = 10
+    ```
+    
+    2. **Increase client timeout in `dist/game/config/Network.ini`:**
+    ```ini
+    ClientPacketQueueSize = 20
+    ClientPacketQueueMaxPacketsPerSecond = 80
+    ClientPacketQueueMeasureInterval = 5
+    ```
+    
+    3. **Monitor server performance:**
+    ```bash
+    //serverinfo
+    ```
+    
+    4. **Check for network issues:**
+    ```bash
+    ping -c 100 your.server.ip
+    ```
+    
+    5. **Review error logs:**
+    ```bash
+    grep -i "disconnect" dist/game/log/java.log
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Performance Issues
+
+<AccordionGroup>
+  <Accordion title="Server lag and poor performance" icon="gauge">
+    **Symptoms:**
+    - High latency
+    - Delayed commands
+    - Slow NPC responses
+    
+    **Diagnostic Steps:**
+    
+    1. **Check server metrics:**
+    ```bash
+    //serverinfo
+    ```
+    
+    2. **Monitor memory usage:**
+    - Used memory > 80% of max: Increase heap
+    - Frequent GC: Optimize or add memory
+    
+    3. **Check thread count:**
+    - >1000 threads: Possible thread leak
+    - Investigate recent changes
+    
+    4. **Review CPU usage:**
+    ```bash
+    top -p $(pgrep -f L2J)
+    ```
+    
+    **Solutions:**
+    
+    1. **Optimize JVM settings:**
+    ```bash
+    java -Xms4G -Xmx8G \
+      -XX:+UseG1GC \
+      -XX:MaxGCPauseMillis=200 \
+      -XX:+DisableExplicitGC \
+      -XX:+ParallelRefProcEnabled \
+      -jar L2J_Mobius_C4_ScionsOfDestiny.jar
+    ```
+    
+    2. **Reduce geodata precision in `dist/game/config/GeoEngine.ini`:**
+    ```ini
+    # Lower value = better performance, less accuracy
+    PathFinding = 1
+    ```
+    
+    3. **Limit active spawns:**
+    - Review spawn density
+    - Disable unnecessary NPCs
+    
+    4. **Database optimization:**
+    ```sql
+    OPTIMIZE TABLE characters;
+    OPTIMIZE TABLE items;
+    ANALYZE TABLE characters;
+    ```
+    
+    5. **Enable database connection pooling in `dist/game/config/Database.ini`:**
+    ```ini
+    MaximumPoolSize = 10
+    MinimumIdle = 5
+    ```
+  </Accordion>
+
+  <Accordion title="Memory leaks" icon="droplet">
+    **Symptoms:**
+    - Memory usage continuously increasing
+    - Server crashes after extended runtime
+    - `OutOfMemoryError` in logs
+    
+    **Diagnostic:**
+    
+    1. **Monitor memory over time:**
+    ```bash
+    watch -n 60 '//serverinfo'
+    ```
+    
+    2. **Take heap dump:**
+    ```bash
+    jmap -dump:live,format=b,file=heap.bin <PID>
+    ```
+    
+    3. **Analyze with VisualVM or Eclipse MAT**
+    
+    **Common Causes:**
+    - Improper use of `//reload` commands
+    - Custom scripts not cleaning up
+    - Event handlers not deregistered
+    - Static collections growing unbounded
+    
+    **Solutions:**
+    
+    1. **Restart server regularly:**
+    ```bash
+    //server_restart 300
+    ```
+    
+    2. **Avoid runtime reloads on production**
+    
+    3. **Review custom scripts for cleanup**
+    
+    4. **Increase heap if memory is legitimately needed**
+  </Accordion>
+</AccordionGroup>
+
+## Data and Database Issues
+
+<AccordionGroup>
+  <Accordion title="Character data corruption" icon="user-injured">
+    **Symptoms:**
+    - Character cannot login
+    - Missing items or skills
+    - Stuck at invalid coordinates
+    
+    **Solutions:**
+    
+    1. **Use repair command:**
+    ```bash
+    //repairchar <character_name>
+    ```
+    
+    2. **Reset character position:**
+    ```sql
+    UPDATE characters 
+    SET x=83400, y=147943, z=-3404 
+    WHERE char_name='StuckPlayer';
+    ```
+    
+    3. **Restore from backup:**
+    ```bash
+    mysql -u root -p l2jmobius < backup_YYYYMMDD.sql
+    ```
+    
+    4. **Clear invalid items:**
+    ```sql
+    DELETE FROM items WHERE item_id NOT IN (SELECT item_id FROM item_templates);
+    ```
+    
+    <Warning>
+    Always backup database before making manual changes.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Quest not working" icon="scroll">
+    **Symptoms:**
+    - Quest won't start
+    - NPCs not responding
+    - Quest progression blocked
+    
+    **Solutions:**
+    
+    1. **Reload specific quest:**
+    ```bash
+    //reload quest <quest_id>
+    # or
+    //reload quest <quest_name>
+    ```
+    
+    2. **Check quest state:**
+    ```sql
+    SELECT * FROM character_quests WHERE char_id = <char_id>;
+    ```
+    
+    3. **Reset quest for player:**
+    ```sql
+    DELETE FROM character_quests 
+    WHERE char_id = <char_id> AND quest_name = 'Q00255_Tutorial';
+    ```
+    
+    4. **Verify quest script exists:**
+    ```bash
+    ls dist/game/data/scripts/quests/Q00255_Tutorial/
+    ```
+    
+    5. **Check script errors in logs:**
+    ```bash
+    grep -i "quest" dist/game/log/error.log
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Spawn and NPC Issues
+
+<AccordionGroup>
+  <Accordion title="NPCs not spawning" icon="ghost">
+    **Symptoms:**
+    - Missing NPCs in world
+    - Empty towns or hunting grounds
+    
+    **Solutions:**
+    
+    1. **Respawn all NPCs:**
+    ```bash
+    //respawnall
+    ```
+    
+    2. **Check spawn data loaded:**
+    ```bash
+    grep -i "spawn" dist/game/log/java.log
+    ```
+    
+    3. **Manually spawn NPC:**
+    ```bash
+    //spawn <npc_id>
+    ```
+    
+    4. **Verify NPC template exists:**
+    ```bash
+    //reload npc
+    ```
+    
+    5. **Check spawn tables:**
+    ```sql
+    SELECT * FROM spawnlist WHERE npc_id = 30001;
+    ```
+  </Accordion>
+
+  <Accordion title="Raid boss not respawning" icon="dragon">
+    **Symptoms:**
+    - Raid boss killed but not respawning
+    - Incorrect respawn time
+    
+    **Solutions:**
+    
+    1. **Check raid boss status:**
+    ```sql
+    SELECT * FROM grandboss_data WHERE boss_id = <boss_id>;
+    SELECT * FROM raidboss_spawnlist WHERE boss_id = <boss_id>;
+    ```
+    
+    2. **Reset respawn timer:**
+    ```sql
+    UPDATE grandboss_data 
+    SET respawn_time = 0 
+    WHERE boss_id = <boss_id>;
+    ```
+    
+    3. **Force respawn:**
+    ```bash
+    //grandboss <boss_id>
+    ```
+    
+    4. **Reload boss manager:**
+    ```bash
+    //reload handler
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Olympiad and Siege Issues
+
+<AccordionGroup>
+  <Accordion title="Olympiad stuck or not cycling" icon="trophy">
+    **Symptoms:**
+    - Olympiad period not ending
+    - Heroes not being selected
+    
+    **Solutions:**
+    
+    1. **Check Olympiad status:**
+    ```bash
+    //checkolympiad
+    ```
+    
+    2. **Manually save Olympiad:**
+    ```bash
+    //saveolymp
+    ```
+    
+    3. **Force end period and select heroes:**
+    ```bash
+    //endolympiad
+    ```
+    
+    <Warning>
+    `//endolympiad` immediately cycles the Olympiad. Use only when period is truly stuck.
+    </Warning>
+    
+    4. **Check Olympiad configuration in `dist/game/config/Olympiad.ini`:**
+    ```ini
+    AltOlyPeriod = 2592000000
+    AltOlyWeeklyPeriod = 604800000
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Logging and Debugging
+
+### Enable Debug Logging
+
+For development troubleshooting, enable verbose logging:
+
+1. **Locate logging configuration** (typically in startup scripts)
+
+2. **Enable debug mode:**
+```bash
+java -Ddebug=true -jar L2J_Mobius_C4_ScionsOfDestiny.jar
+```
+
+3. **Review logs:**
+```bash
+tail -f dist/game/log/java.log
+tail -f dist/game/log/error.log
+```
+
+### Common Log Locations
+
+```
+dist/game/log/
+├── java.log          # General server log
+├── error.log         # Error messages
+├── chat.log          # Chat messages
+├── items.log         # Item transactions
+└── audit.log         # GM actions
+```
+
+## Emergency Procedures
+
+<Warning>
+**Server Crash Recovery**
+
+1. **Stop any running instances:**
+   ```bash
+   pkill -f L2J
+   ```
+
+2. **Check database integrity:**
+   ```bash
+   mysqlcheck -u root -p --auto-repair l2jmobius
+   ```
+
+3. **Review crash logs:**
+   ```bash
+   less dist/game/log/error.log
+   ```
+
+4. **Restore from backup if needed:**
+   ```bash
+   mysql -u root -p l2jmobius < backup.sql
+   ```
+
+5. **Start server with increased logging:**
+   ```bash
+   java -Xmx4G -jar L2J_Mobius_C4_ScionsOfDestiny.jar > startup.log 2>&1
+   ```
+</Warning>
+
+## Getting Help
+
+<CardGroup cols={2}>
+  <Card title="Server Logs" icon="file-lines">
+    Always include relevant log excerpts when requesting help
+  </Card>
+  <Card title="L2J Forums" icon="comments" href="https://l2jmobius.org">
+    Official community support
+  </Card>
+  <Card title="GitHub Issues" icon="github" href="https://github.com/L2J/L2J_Mobius/issues">
+    Report bugs and issues
+  </Card>
+  <Card title="Discord Community" icon="discord">
+    Real-time community assistance
+  </Card>
+</CardGroup>
+
+## Prevention Best Practices
+
+1. **Regular Backups:** Automate daily database backups
+2. **Staging Environment:** Test changes before production
+3. **Monitor Resources:** Set up alerting for memory/CPU
+4. **Update Regularly:** Keep server updated with patches
+5. **Document Changes:** Maintain changelog of modifications
+6. **Limit Access:** Restrict admin permissions appropriately
+
+## Related Documentation
+
+<CardGroup cols={3}>
+  <Card title="Admin Commands" icon="terminal" href="/admin/commands">
+    Command reference
+  </Card>
+  <Card title="Security" icon="shield" href="/admin/security">
+    Access control
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/admin/monitoring">
+    Performance monitoring
+  </Card>
+</CardGroup>

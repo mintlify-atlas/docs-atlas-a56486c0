@@ -1,0 +1,536 @@
+---
+title: 'Siege System'
+description: 'Castle siege management and SiegeManager API reference'
+---
+
+## Overview
+
+The Siege system manages castle siege warfare in L2J Mobius Chronicle 4. It coordinates siege registration, tower spawning, siege timing, clan participation, and siege-related game mechanics.
+
+**Key Classes:**
+- `org.l2jmobius.gameserver.managers.SiegeManager` - Siege configuration and coordination (singleton)
+- `org.l2jmobius.gameserver.managers.CastleManager` - Castle ownership and management (singleton)
+- `org.l2jmobius.gameserver.model.siege.Siege` - Individual siege instance logic
+- `org.l2jmobius.gameserver.model.siege.Castle` - Castle data and ownership
+
+## SiegeManager
+
+Location: `org.l2jmobius.gameserver.managers.SiegeManager`
+
+### Singleton Pattern
+
+```java
+SiegeManager siegeManager = SiegeManager.getInstance();
+```
+
+Initialized on server startup, loads configuration from `./config/Siege.ini`.
+
+### Configuration Properties
+
+<ResponseField name="_siegeCycle" type="int">
+  Siege cycle duration in weeks (default: 2).
+  
+  ```java
+  public int getSiegeCycle()
+  ```
+</ResponseField>
+
+<ResponseField name="_attackerMaxClans" type="int">
+  Maximum number of attacking clans (default: 500).
+  
+  ```java
+  public int getAttackerMaxClans()
+  ```
+</ResponseField>
+
+<ResponseField name="_defenderMaxClans" type="int">
+  Maximum number of defending clans (default: 500).
+  
+  ```java
+  public int getDefenderMaxClans()
+  ```
+</ResponseField>
+
+<ResponseField name="_attackerRespawnDelay" type="int">
+  Respawn delay for attackers in milliseconds (default: 0).
+  
+  ```java
+  public int getAttackerRespawnDelay()
+  ```
+</ResponseField>
+
+<ResponseField name="_siegeLength" type="int">
+  Siege duration in minutes (default: 120).
+  
+  ```java
+  public int getSiegeLength()
+  ```
+</ResponseField>
+
+<ResponseField name="_siegeClanMinLevel" type="int">
+  Minimum clan level to participate (default: 4).
+  
+  ```java
+  public int getSiegeClanMinLevel()
+  ```
+</ResponseField>
+
+<ResponseField name="_flagMaxCount" type="int">
+  Maximum number of flags per clan (default: 1).
+  
+  ```java
+  public int getFlagMaxCount()
+  ```
+</ResponseField>
+
+<ResponseField name="_bloodAllianceReward" type="int">
+  Blood Alliance items rewarded for successful defense (default: 0).
+  
+  ```java
+  public int getBloodAllianceReward()
+  ```
+</ResponseField>
+
+### Key Methods
+
+#### Registration Validation
+
+<ParamField path="checkIsRegistered" type="boolean">
+  Checks if a clan is registered or owns a castle.
+  
+  ```java
+  public boolean checkIsRegistered(Clan clan, int castleid)
+  ```
+  
+  **Parameters:**
+  - `clan` - The clan to check
+  - `castleid` - The castle ID
+  
+  **Returns:** `true` if clan owns castle or is registered for siege
+  
+  Queries database table `siege_clans` for registration status.
+</ParamField>
+
+#### Siege Lookup
+
+<ParamField path="getSiege" type="Siege">
+  Gets the active siege at specified coordinates.
+  
+  ```java
+  public Siege getSiege(int x, int y, int z)
+  public Siege getSiege(WorldObject activeObject)
+  public Siege getSiege(ILocational loc)
+  ```
+  
+  **Returns:** Siege instance if location is in siege zone, `null` otherwise
+  
+  Iterates through all castles checking if coordinates fall within siege zones.
+</ParamField>
+
+<ParamField path="getSieges" type="List<Siege>">
+  Gets all siege instances.
+  
+  ```java
+  public List<Siege> getSieges()
+  ```
+  
+  **Returns:** List of all castle sieges (one per castle)
+</ParamField>
+
+#### Tower Management
+
+<ParamField path="getControlTowers" type="List<TowerSpawn>">
+  Gets control tower spawn locations for a castle.
+  
+  ```java
+  public List<TowerSpawn> getControlTowers(int castleId)
+  ```
+  
+  **Returns:** List of control tower spawn definitions
+  
+  Control towers are defensive structures that must be destroyed by attackers.
+</ParamField>
+
+<ParamField path="getFlameTowers" type="List<TowerSpawn>">
+  Gets flame tower spawn locations for a castle.
+  
+  ```java
+  public List<TowerSpawn> getFlameTowers(int castleId)
+  ```
+  
+  **Returns:** List of flame tower spawn definitions with associated zone lists
+  
+  Flame towers can be upgraded and provide defensive bonuses.
+</ParamField>
+
+#### Siege Skills
+
+<ParamField path="addSiegeSkills" type="void">
+  Grants siege-related skills to a player.
+  
+  ```java
+  public void addSiegeSkills(Player character)
+  ```
+  
+  **Skills granted based on:**
+  - Player noble status (`character.isNoble()`)
+  - Castle ownership (`character.getClan().getCastleId() > 0`)
+  
+  Uses `SkillData.getInstance().getSiegeSkills()` to retrieve appropriate skills.
+</ParamField>
+
+<ParamField path="removeSiegeSkills" type="void">
+  Removes siege skills from a player.
+  
+  ```java
+  public void removeSiegeSkills(Player character)
+  ```
+  
+  Called when player leaves siege zone or siege ends.
+</ParamField>
+
+### Tower Configuration
+
+Towers are loaded from `./config/Siege.ini` using the format:
+
+```ini
+# Control Towers
+GludioControlTower1 = x,y,z,npcId
+GludioControlTower2 = x,y,z,npcId
+
+# Flame Towers
+GludioFlameTower1 = x,y,z,npcId,zoneId1,zoneId2...
+```
+
+**TowerSpawn Structure:**
+```java
+public class TowerSpawn {
+    private final int _npcId;
+    private final Location _location;
+    private final List<Integer> _zoneList; // For flame towers
+    private int _upgradeLevel; // Flame tower upgrade level
+}
+```
+
+## CastleManager
+
+Location: `org.l2jmobius.gameserver.managers.CastleManager`
+
+### Singleton Pattern
+
+```java
+CastleManager castleManager = CastleManager.getInstance();
+```
+
+### Castle Lookup Methods
+
+<ParamField path="getCastleById" type="Castle">
+  Retrieves a castle by its ID.
+  
+  ```java
+  public Castle getCastleById(int castleId)
+  ```
+  
+  **Castle IDs:**
+  - 1: Gludio
+  - 2: Dion
+  - 3: Giran
+  - 4: Oren
+  - 5: Aden
+  - 6: Innadril
+  - 7: Goddard
+  - 8: Rune
+  - 9: Schuttgart
+</ParamField>
+
+<ParamField path="getCastle" type="Castle">
+  Gets castle by location or name.
+  
+  ```java
+  public Castle getCastle(int x, int y, int z)
+  public Castle getCastle(WorldObject activeObject)
+  public Castle getCastle(String name)
+  ```
+  
+  **Returns:** Castle instance or `null` if not found
+</ParamField>
+
+<ParamField path="getCastleByOwner" type="Castle">
+  Finds castle owned by a specific clan.
+  
+  ```java
+  public Castle getCastleByOwner(Clan clan)
+  ```
+  
+  **Returns:** Castle instance or `null` if clan owns no castle
+</ParamField>
+
+<ParamField path="getCastles" type="List<Castle>">
+  Gets all castles in the game.
+  
+  ```java
+  public List<Castle> getCastles()
+  ```
+  
+  **Returns:** Thread-safe list of all castle instances (9 total)
+</ParamField>
+
+### Castle Index Operations
+
+<ParamField path="getCastleIndex" type="int">
+  Gets the array index of a castle.
+  
+  ```java
+  public int getCastleIndex(int castleId)
+  public int getCastleIndex(int x, int y, int z)
+  public int getCastleIndex(WorldObject activeObject)
+  ```
+  
+  **Returns:** Index (0-8) or -1 if not found
+</ParamField>
+
+<ParamField path="findNearestCastleIndex" type="int">
+  Finds nearest castle to an object.
+  
+  ```java
+  public int findNearestCastleIndex(WorldObject obj)
+  public int findNearestCastleIndex(WorldObject obj, long maxDistanceValue)
+  ```
+  
+  **Returns:** Index of nearest castle or -1
+</ParamField>
+
+### Tax & Economic Management
+
+<ParamField path="validateTaxes" type="void">
+  Validates and adjusts castle tax rates based on Seven Signs.
+  
+  ```java
+  public void validateTaxes(int sealStrifeOwner)
+  ```
+  
+  **Tax Limits:**
+  - Dusk wins: Max 5%
+  - Dawn wins: Max 25%
+  - No winner: Max 15%
+  
+  Automatically reduces any castle tax exceeding the maximum.
+</ParamField>
+
+### Circlet Management
+
+**Castle Circlets:** Special items for castle owners
+
+<ParamField path="getCircletByCastleId" type="int">
+  Gets circlet item ID for a castle.
+  
+  ```java
+  public int getCircletByCastleId(int castleId)
+  ```
+  
+  **Circlet Item IDs:**
+  ```java
+  private static final int[] _castleCirclets = {
+      0,     // No castle
+      6838,  // Gludio
+      6835,  // Dion
+      6839,  // Giran
+      6837,  // Oren
+      6840,  // Aden
+      6834,  // Innadril
+      6836,  // Goddard
+      8182,  // Rune
+      8183   // Schuttgart
+  };
+  ```
+</ParamField>
+
+<ParamField path="removeCirclet" type="void">
+  Removes circlets from clan members.
+  
+  ```java
+  public void removeCirclet(Clan clan, int castleId)
+  public void removeCirclet(ClanMember member, int castleId)
+  ```
+  
+  Called when castle ownership changes. Handles both online and offline players.
+</ParamField>
+
+### Siege Date Tracking
+
+<ParamField path="registerSiegeDate" type="void">
+  Registers a siege date for a castle.
+  
+  ```java
+  public void registerSiegeDate(int castleId, long siegeDate)
+  ```
+  
+  Prevents multiple sieges from occurring simultaneously.
+</ParamField>
+
+<ParamField path="getSiegeDates" type="int">
+  Counts how many sieges scheduled near a date.
+  
+  ```java
+  public int getSiegeDates(long siegeDate)
+  ```
+  
+  **Returns:** Count of sieges within 1 second of specified date
+</ParamField>
+
+### Instance Management
+
+<ParamField path="loadInstances" type="void">
+  Loads castle instances from database.
+  
+  ```java
+  public void loadInstances()
+  ```
+  
+  Queries `castle` table and creates Castle objects.
+</ParamField>
+
+<ParamField path="activateInstances" type="void">
+  Activates all castle instances.
+  
+  ```java
+  public void activateInstances()
+  ```
+  
+  Called during server initialization.
+</ParamField>
+
+## Usage Examples
+
+### Check Siege Registration
+
+```java
+Player player = ...;
+Clan clan = player.getClan();
+int castleId = 1; // Gludio
+
+SiegeManager siegeManager = SiegeManager.getInstance();
+
+if (siegeManager.checkIsRegistered(clan, castleId)) {
+    player.sendMessage("Your clan is registered for the siege!");
+} else {
+    player.sendMessage("Your clan is not registered.");
+}
+```
+
+### Find Active Siege
+
+```java
+Player player = ...;
+SiegeManager siegeManager = SiegeManager.getInstance();
+
+Siege siege = siegeManager.getSiege(player);
+if (siege != null && siege.isInProgress()) {
+    player.sendMessage("You are in an active siege zone!");
+    
+    // Grant siege skills
+    siegeManager.addSiegeSkills(player);
+}
+```
+
+### Get Castle by Location
+
+```java
+Player player = ...;
+CastleManager castleManager = CastleManager.getInstance();
+
+Castle castle = castleManager.getCastle(player);
+if (castle != null) {
+    player.sendMessage("You are in " + castle.getName() + " territory");
+    player.sendMessage("Tax rate: " + castle.getTaxPercent() + "%");
+    
+    Clan owner = castle.getOwner();
+    if (owner != null) {
+        player.sendMessage("Owned by: " + owner.getName());
+    }
+}
+```
+
+### List All Sieges
+
+```java
+SiegeManager siegeManager = SiegeManager.getInstance();
+List<Siege> sieges = siegeManager.getSieges();
+
+for (Siege siege : sieges) {
+    Castle castle = siege.getCastle();
+    System.out.println(castle.getName() + " - Next siege: " + siege.getSiegeDate());
+    System.out.println("  Attackers: " + siege.getAttackerClans().size());
+    System.out.println("  Defenders: " + siege.getDefenderClans().size());
+}
+```
+
+### Spawn Siege Towers
+
+```java
+int castleId = 1; // Gludio
+SiegeManager siegeManager = SiegeManager.getInstance();
+
+// Get control towers
+List<TowerSpawn> controlTowers = siegeManager.getControlTowers(castleId);
+for (TowerSpawn tower : controlTowers) {
+    // Spawn tower NPC at location
+    Spawn spawn = new Spawn(tower.getNpcId());
+    spawn.setXYZ(tower.getLocation());
+    spawn.init();
+}
+
+// Get flame towers
+List<TowerSpawn> flameTowers = siegeManager.getFlameTowers(castleId);
+for (TowerSpawn tower : flameTowers) {
+    // Spawn upgraded flame tower
+    int upgradeLevel = tower.getUpgradeLevel();
+    // Apply upgrade bonuses...
+}
+```
+
+### Validate Taxes After Seven Signs
+
+```java
+import org.l2jmobius.gameserver.model.sevensigns.SevenSigns;
+
+CastleManager castleManager = CastleManager.getInstance();
+int winner = SevenSigns.getInstance().getSealOwner(SevenSigns.SEAL_STRIFE);
+
+// Adjust max tax rates based on Seven Signs winner
+castleManager.validateTaxes(winner);
+```
+
+## Related Systems
+
+- **Siege** (`org.l2jmobius.gameserver.model.siege.Siege`) - Individual siege instance
+- **Castle** (`org.l2jmobius.gameserver.model.siege.Castle`) - Castle data model
+- **SiegeGuardManager** - Manages siege guard NPCs
+- **MercTicketManager** - Handles mercenary tickets
+- **CHSiegeManager** - Clan hall siege management
+- **TerritoryWarManager** - Territory war system
+
+## Configuration
+
+Siege configuration is loaded from `./config/Siege.ini`:
+
+```ini
+# Siege Settings
+SiegeCycle = 2
+SiegeLength = 120
+AttackerMaxClans = 500
+DefenderMaxClans = 500
+AttackerRespawn = 0
+SiegeClanMinLevel = 4
+MaxFlags = 1
+BloodAllianceReward = 1
+
+# Tower Definitions
+GludioControlTower1 = -18237,109591,-2488,13002
+# ... more towers
+```
+
+## Source Reference
+
+- Source: `java/org/l2jmobius/gameserver/managers/SiegeManager.java:47`
+- Source: `java/org/l2jmobius/gameserver/managers/CastleManager.java:44`

@@ -1,0 +1,210 @@
+---
+title: 'Scripting Engine Overview'
+description: 'Understanding the L2J Mobius scripting system, directory structure, and script loading process'
+---
+
+## Introduction
+
+L2J Mobius Chronicle 4 features a powerful Java-based scripting system that enables server customization without modifying core game files. Scripts are automatically loaded at server startup and can be reloaded at runtime.
+
+## Directory Structure
+
+All scripts are located in `dist/game/data/scripts/` with the following organization:
+
+```
+scripts/
+├── quests/              # Quest implementations
+│   ├── QuestMasterHandler.java
+│   ├── Q00001_LettersOfLove/
+│   ├── Q00419_GetAPet/
+│   └── ...
+├── ai/                  # AI behavior scripts
+│   ├── bosses/         # Grand boss AI (Antharas, Baium, etc.)
+│   ├── areas/          # Zone-specific behaviors
+│   └── others/         # Misc NPC AI (teleporters, buffers, etc.)
+├── handlers/           # Handler implementations
+│   ├── admincommandhandlers/
+│   ├── itemhandlers/
+│   ├── voicedcommandhandlers/
+│   ├── effecthandlers/
+│   └── ...
+├── custom/             # Custom server modifications
+├── events/             # Timed events (Christmas, L2Day, etc.)
+└── village_master/     # Class change NPCs
+```
+
+## Script Types
+
+### Quest Scripts
+Extend the `Quest` class to implement player quests with state management, item rewards, and NPC interactions.
+
+### AI Scripts
+Extend the `Script` class to define custom NPC behavior, boss mechanics, and zone interactions.
+
+### Handlers
+Implement specific handler interfaces (`IItemHandler`, `IAdminCommandHandler`, etc.) to extend game functionality.
+
+## Script Loading Process
+
+<Steps>
+
+<Step title="Server Initialization">
+The ScriptManager loads all scripts from the scripts directory during server startup.
+</Step>
+
+<Step title="Master Handler Execution">
+Master handler classes (e.g., `QuestMasterHandler.java`) instantiate all registered scripts of their type.
+
+```java quests/QuestMasterHandler.java
+public class QuestMasterHandler {
+    private static final Class<?>[] QUESTS = {
+        Q00001_LettersOfLove.class,
+        Q00419_GetAPet.class,
+        // ... all quest classes
+    };
+    
+    public static void main(String[] args) {
+        for (Class<?> quest : QUESTS) {
+            try {
+                quest.getDeclaredConstructor().newInstance();
+            } catch (Exception e) {
+                LOGGER.log(Level.SEVERE, "Failed loading quest", e);
+            }
+        }
+    }
+}
+```
+</Step>
+
+<Step title="Script Registration">
+Each script registers itself with the appropriate manager during construction:
+- Quests register with QuestManager
+- Handlers register with HandlerManager
+- AI scripts attach to specific NPCs
+</Step>
+
+<Step title="Runtime Reload">
+Scripts can be reloaded without server restart using:
+```bash
+//reload scripts
+```
+</Step>
+
+</Steps>
+
+## Base Script Classes
+
+### Quest Class
+```java
+public class Q00419_GetAPet extends Quest {
+    public Q00419_GetAPet() {
+        super(419, "Get a Pet");
+        registerQuestItems(QUEST_ITEMS...);
+        addStartNpc(NPC_ID);
+        addTalkId(NPC_IDS...);
+        addKillId(MONSTER_IDS...);
+    }
+}
+```
+
+### Script Class (for AI)
+```java
+public class Antharas extends Script {
+    private Antharas() {
+        addStartNpc(HEART, TELEPORT_CUBE);
+        addTalkId(HEART, TELEPORT_CUBE);
+        addSpawnId(ANTHARAS);
+        addAttackId(ANTHARAS);
+        addKillId(ANTHARAS);
+    }
+}
+```
+
+### Handler Interface
+```java
+public class SoulShots implements IItemHandler {
+    @Override
+    public boolean onItemUse(Playable playable, Item item, boolean forceUse) {
+        // Handler implementation
+        return true;
+    }
+}
+```
+
+## Script Lifecycle
+
+1. **Construction** - Script instantiated via reflection
+2. **Registration** - Script registers event handlers and NPCs
+3. **Active** - Script responds to game events
+4. **Unload** - Script cleanup when reloading (optional `unload()` method)
+5. **Reload** - New instance created with updated code
+
+## Event Registration Methods
+
+Scripts register for specific game events:
+
+| Method | Triggered When |
+|--------|---------------|
+| `addStartNpc()` | Player initiates conversation |
+| `addTalkId()` | Player talks to NPC |
+| `addFirstTalkId()` | First conversation with NPC |
+| `addKillId()` | Registered NPC is killed |
+| `addAttackId()` | Registered NPC is attacked |
+| `addSpawnId()` | Registered NPC spawns |
+| `addSpellFinishedId()` | NPC finishes casting skill |
+| `addAggroRangeEnterId()` | Player enters NPC aggro range |
+
+## Configuration
+
+### Reload Configuration
+Scripts can be reloaded in two ways:
+
+<Tabs>
+  <Tab title="Admin Command">
+    ```bash
+    //reload scripts
+    ```
+    Unloads all scripts and reloads from source files.
+  </Tab>
+  
+  <Tab title="Programmatic">
+    ```java
+    ScriptManager.getInstance().unloadAllScripts();
+    ScriptManager.getInstance().reloadAllScripts();
+    ```
+  </Tab>
+</Tabs>
+
+### Script Compilation
+
+Scripts are compiled Java classes. After modifying:
+
+1. Recompile the script class
+2. Place compiled `.class` file in appropriate package directory
+3. Use `//reload scripts` or restart server
+
+<Note>
+For production servers, compile scripts with the same Java version as the game server to avoid compatibility issues.
+</Note>
+
+## Best Practices
+
+- **Package Structure**: Keep scripts in their designated packages
+- **Resource Cleanup**: Implement `unload()` for scripts that create timers or spawn NPCs
+- **Error Handling**: Use try-catch blocks to prevent script crashes from affecting server
+- **Constants**: Define NPC IDs, item IDs as constants at class top
+- **Logging**: Use appropriate log levels (INFO, WARNING, SEVERE)
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quest Scripts" icon="scroll" href="/scripting/quest-scripts">
+    Learn quest scripting with real examples
+  </Card>
+  <Card title="AI Scripts" icon="brain" href="/scripting/ai-scripts">
+    Implement custom NPC and boss AI
+  </Card>
+  <Card title="Handlers" icon="terminal" href="/scripting/handlers">
+    Extend game functionality with handlers
+  </Card>
+</CardGroup>

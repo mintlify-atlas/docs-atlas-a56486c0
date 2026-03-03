@@ -1,0 +1,530 @@
+---
+title: 'NPC Class'
+description: 'API reference for NPCs, monsters, and non-player creatures'
+icon: 'robot'
+---
+
+## Overview
+
+The `Npc` class represents all Non-Player Characters in the game world, including monsters, friendly NPCs, merchants, guards, and quest NPCs. It extends `Creature` and uses templates to define static properties.
+
+**Package:** `org.l2jmobius.gameserver.model.actor`
+
+**Hierarchy:**
+```
+WorldObject
+  └── Creature
+      └── Npc
+          ├── Attackable (Monsters)
+          ├── Monster
+          ├── Guard
+          ├── Merchant
+          ├── Teleporter
+          └── ... (50+ specialized types)
+```
+
+**Source:** `model/actor/Npc.java:126`
+
+## Class Hierarchy
+
+<CardGroup cols={2}>
+  <Card title="Npc (Base)" icon="robot">
+    Core NPC functionality for all non-player creatures
+  </Card>
+  <Card title="Attackable" icon="sword">
+    Monsters and hostile creatures with AI
+  </Card>
+  <Card title="Guard" icon="shield">
+    Town guards and defenders
+  </Card>
+  <Card title="Merchant" icon="store">
+    Shop NPCs and traders
+  </Card>
+</CardGroup>
+
+## Key Properties
+
+### Core Identity
+
+<ParamField path="_spawn" type="Spawn">
+  The spawn object that manages this NPC's respawn behavior
+</ParamField>
+
+<ParamField path="_isBusy" type="boolean" default="false">
+  Whether this NPC is currently busy (in dialogue, etc.)
+</ParamField>
+
+<ParamField path="_busyMessage" type="String" default='""'>
+  Message to display when NPC is busy
+</ParamField>
+
+<ParamField path="_isDecayed" type="boolean" default="false">
+  Whether the decay task has been called (for corpses)
+</ParamField>
+
+### Behavior Flags
+
+<ParamField path="_isAutoAttackable" type="boolean" default="false">
+  Whether this NPC can be auto-attacked
+</ParamField>
+
+<ParamField path="_isRandomAnimationEnabled" type="boolean" default="true">
+  Enables random idle animations
+</ParamField>
+
+<ParamField path="_isRandomWalkingEnabled" type="boolean" default="true">
+  Enables random walking behavior
+</ParamField>
+
+<ParamField path="_isTalkable" type="boolean">
+  Whether players can talk to this NPC (from template)
+</ParamField>
+
+<ParamField path="_isQuestMonster" type="boolean">
+  Whether this is a quest-related monster (from template)
+</ParamField>
+
+<ParamField path="_isFakePlayer" type="boolean">
+  Whether this NPC appears as a fake player (from template)
+</ParamField>
+
+### Visual Properties
+
+<ParamField path="_currentLHandId" type="int">
+  Current left-hand weapon/item ID
+</ParamField>
+
+<ParamField path="_currentRHandId" type="int">
+  Current right-hand weapon/item ID
+</ParamField>
+
+<ParamField path="_currentEnchant" type="int">
+  Current weapon enchant level (visual)
+</ParamField>
+
+<ParamField path="_currentCollisionHeight" type="double">
+  Current collision height (used for grow effects)
+</ParamField>
+
+<ParamField path="_currentCollisionRadius" type="double">
+  Current collision radius (used for grow effects)
+</ParamField>
+
+### Combat Properties
+
+<ParamField path="_soulshotamount" type="int" default="0">
+  Soulshot count for this NPC
+</ParamField>
+
+<ParamField path="_spiritshotamount" type="int" default="0">
+  Spiritshot count for this NPC
+</ParamField>
+
+<ParamField path="_shotsMask" type="int" default="0">
+  Bitmask of active shot types
+</ParamField>
+
+## Core Methods
+
+### Template and Configuration
+
+<ResponseField name="getTemplate" type="NpcTemplate">
+  Returns the NPC's template with base stats and configuration
+  ```java
+  NpcTemplate template = npc.getTemplate();
+  int npcId = template.getId();
+  String name = template.getName();
+  ```
+</ResponseField>
+
+<ResponseField name="getId" type="int">
+  Returns the NPC's template ID
+  ```java
+  int npcId = npc.getId();
+  if (npcId == 30001) {
+      // Specific NPC logic
+  }
+  ```
+</ResponseField>
+
+### Spawn Management
+
+<ResponseField name="getSpawn" type="Spawn">
+  Returns the spawn object managing this NPC
+  ```java
+  Spawn spawn = npc.getSpawn();
+  if (spawn != null) {
+      int respawnDelay = spawn.getRespawnDelay();
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="setSpawn" type="void">
+  Sets the spawn object for this NPC
+  ```java
+  npc.setSpawn(spawnObject);
+  ```
+</ResponseField>
+
+### Behavior Control
+
+<ResponseField name="isBusy" type="boolean">
+  Checks if NPC is busy
+  ```java
+  if (npc.isBusy()) {
+      player.sendMessage(npc.getBusyMessage());
+      return;
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="setBusy" type="void">
+  Sets the busy state and message
+  ```java
+  npc.setBusy(true);
+  npc.setBusyMessage("I'm currently helping someone else.");
+  ```
+</ResponseField>
+
+<ResponseField name="isAutoAttackable" type="boolean">
+  Checks if NPC can be auto-attacked
+  ```java
+  boolean canAttack = npc.isAutoAttackable(player);
+  ```
+</ResponseField>
+
+<ResponseField name="setIsAutoAttackable" type="void">
+  Sets auto-attackable state
+  ```java
+  npc.setIsAutoAttackable(true);
+  ```
+</ResponseField>
+
+### Animation and Movement
+
+<ResponseField name="setRandomAnimationEnabled" type="void">
+  Enables or disables random animations
+  ```java
+  npc.setRandomAnimationEnabled(false); // Disable idle animations
+  ```
+</ResponseField>
+
+<ResponseField name="setRandomWalkingEnabled" type="void">
+  Enables or disables random walking
+  ```java
+  npc.setRandomWalkingEnabled(true);
+  ```
+</ResponseField>
+
+### Dialogue and Interaction
+
+<ResponseField name="showChatWindow" type="void">
+  Shows HTML dialogue window to player
+  ```java
+  npc.showChatWindow(player);
+  // Or with custom HTML file
+  npc.showChatWindow(player, "data/html/merchant/30001.htm");
+  ```
+</ResponseField>
+
+<ResponseField name="onBypassFeedback" type="void">
+  Handles bypass commands from HTML buttons
+  ```java
+  @Override
+  public void onBypassFeedback(Player player, String command) {
+      if (command.startsWith("Quest")) {
+          // Handle quest bypass
+      }
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="isTalkable" type="boolean">
+  Checks if NPC can be talked to
+  ```java
+  if (npc.isTalkable()) {
+      npc.showChatWindow(player);
+  }
+  ```
+</ResponseField>
+
+### Decay and Cleanup
+
+<ResponseField name="isDecayed" type="boolean">
+  Checks if NPC corpse has decayed
+  ```java
+  if (npc.isDead() && !npc.isDecayed()) {
+      // Corpse still visible
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="deleteMe" type="void">
+  Removes NPC from the world
+  ```java
+  npc.deleteMe();
+  ```
+</ResponseField>
+
+### Script Integration
+
+<ResponseField name="getScriptValue" type="int">
+  Gets script-specific value
+  ```java
+  int value = npc.getScriptValue();
+  ```
+</ResponseField>
+
+<ResponseField name="setScriptValue" type="void">
+  Sets script-specific value
+  ```java
+  npc.setScriptValue(1); // Use for script state
+  ```
+</ResponseField>
+
+### Summoning
+
+<ResponseField name="getSummonedNpcs" type="Map<Integer, Npc>">
+  Gets all NPCs summoned by this NPC
+  ```java
+  Map<Integer, Npc> summons = npc.getSummonedNpcs();
+  if (summons != null) {
+      for (Npc summon : summons.values()) {
+          // Process summoned NPCs
+      }
+  }
+  ```
+</ResponseField>
+
+## Common Subclasses
+
+### Attackable (Monsters)
+
+Extends Npc with combat AI and aggression mechanics.
+
+```java
+Attackable monster = (Attackable) npc;
+monster.addDamageHate(player, 0, 1000); // Add hate
+boolean isAggressive = monster.isAggressive();
+```
+
+### Guard
+
+Town guards that protect areas and attack criminals.
+
+```java
+Guard guard = new Guard(template);
+guard.setIsAutoAttackable(false);
+```
+
+### Merchant
+
+NPCs that can buy and sell items.
+
+```java
+Merchant merchant = new Merchant(template);
+merchant.showBuyWindow(player, 0);
+```
+
+### Teleporter
+
+NPCs that provide teleportation services.
+
+```java
+Teleporter teleporter = new Teleporter(template);
+teleporter.showTeleportList(player);
+```
+
+## Usage Examples
+
+### Creating and Spawning NPCs
+
+```java
+// Get NPC template
+NpcTemplate template = NpcData.getInstance().getTemplate(30001);
+
+// Create spawn
+Spawn spawn = new Spawn(template);
+spawn.setLocation(x, y, z, heading);
+spawn.setRespawnDelay(60); // 60 seconds
+
+// Spawn the NPC
+Npc npc = spawn.doSpawn();
+```
+
+### Custom NPC Dialogue
+
+```java
+public class CustomNpc extends Npc {
+    public CustomNpc(NpcTemplate template) {
+        super(template);
+    }
+    
+    @Override
+    public void showChatWindow(Player player) {
+        NpcHtmlMessage html = new NpcHtmlMessage(getObjectId());
+        html.setFile(player, "data/html/custom/welcome.htm");
+        html.replace("%name%", player.getName());
+        player.sendPacket(html);
+    }
+    
+    @Override
+    public void onBypassFeedback(Player player, String command) {
+        if (command.equals("givereward")) {
+            player.addItem("Reward", 57, 10000, this, true);
+        }
+    }
+}
+```
+
+### Quest NPC Implementation
+
+```java
+// In quest script
+public class MyQuest extends Quest {
+    private static final int QUEST_NPC = 30001;
+    
+    @Override
+    public String onTalk(Npc npc, Player player) {
+        QuestState qs = getQuestState(player, true);
+        
+        if (npc.getId() == QUEST_NPC) {
+            if (qs.isStarted()) {
+                return "quest_running.htm";
+            } else {
+                return "quest_start.htm";
+            }
+        }
+        return null;
+    }
+    
+    @Override
+    public String onKill(Npc npc, Player killer, boolean isSummon) {
+        QuestState qs = getQuestState(killer, false);
+        if (qs != null && qs.isCond(1)) {
+            qs.setCond(2, true);
+        }
+        return null;
+    }
+}
+```
+
+### Boss Mechanics
+
+```java
+public class RaidBoss extends GrandBoss {
+    private static final int MINION_ID = 20001;
+    
+    public RaidBoss(NpcTemplate template) {
+        super(template);
+    }
+    
+    @Override
+    protected void onDeath(Creature killer) {
+        // Despawn all minions
+        Map<Integer, Npc> summons = getSummonedNpcs();
+        if (summons != null) {
+            for (Npc minion : summons.values()) {
+                minion.deleteMe();
+            }
+        }
+        
+        // Handle rewards
+        if (killer.getActingPlayer() != null) {
+            Player player = killer.getActingPlayer();
+            // Give rewards to party/raid
+        }
+        
+        super.onDeath(killer);
+    }
+    
+    // Spawn minions when HP drops
+    @Override
+    public void reduceCurrentHp(double damage, Creature attacker, 
+                                Skill skill, boolean isDOT) {
+        double hpRatio = getCurrentHp() / getMaxHp();
+        
+        if (hpRatio < 0.5 && getScriptValue() == 0) {
+            setScriptValue(1); // Mark as triggered
+            spawnMinions();
+        }
+        
+        super.reduceCurrentHp(damage, attacker, skill, isDOT);
+    }
+    
+    private void spawnMinions() {
+        for (int i = 0; i < 5; i++) {
+            addMinion(MINION_ID, false);
+        }
+    }
+}
+```
+
+### NPC with Custom AI
+
+```java
+// Set custom AI
+Npc npc = spawn.doSpawn();
+npc.setAI(new CustomAI(npc));
+
+// Custom AI class
+public class CustomAI extends NpcAI {
+    public CustomAI(Npc npc) {
+        super(npc);
+    }
+    
+    @Override
+    protected void onEvtAttacked(Creature attacker, int damage) {
+        // Custom attack response
+        if (getRandom(100) < 30) {
+            // 30% chance to teleport when attacked
+            Npc npc = (Npc) _actor;
+            npc.teleToLocation(npc.getSpawn().getLocation());
+        }
+        super.onEvtAttacked(attacker, damage);
+    }
+}
+```
+
+## Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `INTERACTION_DISTANCE` | 250 | Interaction distance offset |
+| `RANDOM_ITEM_DROP_LIMIT` | 70 | Max distance for item drops |
+| `MINIMUM_SOCIAL_INTERVAL` | 6000 | Min time between social actions (ms) |
+
+## Events
+
+The NPC class triggers various events that can be listened to:
+
+- `OnNpcSpawn` - When NPC spawns
+- `OnNpcTeleport` - When NPC teleports
+- `OnNpcSkillFinished` - When NPC finishes casting
+- `OnNpcCanBeSeen` - Visibility check event
+- `OnNpcEventReceived` - Custom event handling
+
+## Related Classes
+
+<CardGroup cols={2}>
+  <Card title="NpcTemplate" icon="file-code">
+    Template defining NPC base stats and behavior
+  </Card>
+  <Card title="Spawn" icon="location-dot">
+    Manages NPC spawning and respawning
+  </Card>
+  <Card title="NpcAI" icon="brain">
+    AI controller for NPC behavior
+  </Card>
+  <Card title="Attackable" icon="sword">
+    Monster subclass with combat AI
+  </Card>
+</CardGroup>
+
+## Notes
+
+- NPC templates are loaded once and shared across all instances
+- Use `getScriptValue()` for temporary NPC state in scripts
+- NPCs auto-cleanup via `DecayTaskManager` after death
+- Fake player NPCs appear as players in the client
+- Quest monsters have special loot mechanics

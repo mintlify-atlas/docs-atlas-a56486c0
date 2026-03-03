@@ -1,80 +1,255 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: 'Quickstart'
+description: 'Get your L2J Mobius Chronicle 4 server running in minutes'
 ---
 
-## Get started in three steps
+Get your Lineage 2 Chronicle 4 server up and running with this streamlined guide.
 
-Get your documentation site running locally and make your first customization.
+## Prerequisites
 
-### Step 1: Set up your local environment
+Before you begin, ensure you have:
+
+- **Java 25 JDK** installed ([Installation Guide](/setup/installation#installing-java-25))
+- **MySQL 5.7+** or **MariaDB 10.3+** installed
+- **Apache Ant 1.8.2+** for building
+- At least **4GB RAM** (16GB+ recommended)
+- **10GB** free disk space
+
+## Quick Setup
+
+<Steps>
+  <Step title="Download and Build">
+    Clone the repository and build the server:
+    
+    ```bash
+    # Clone the repository
+    git clone https://github.com/fermanzolido/L2C4.git
+    cd L2C4
+    
+    # Build with Ant
+    ant
+    ```
+    
+    The build process creates `LoginServer.jar` and `GameServer.jar` in `build/dist/libs/`.
+  </Step>
+
+  <Step title="Set Up Database">
+    Create the database and install the schema:
+    
+    ```bash
+    # Create MySQL database
+    mysql -u root -p
+    ```
+    
+    ```sql
+    CREATE DATABASE l2jmobiusc4 CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    CREATE USER 'l2jmobius'@'localhost' IDENTIFIED BY 'your_password';
+    GRANT ALL PRIVILEGES ON l2jmobiusc4.* TO 'l2jmobius'@'localhost';
+    FLUSH PRIVILEGES;
+    EXIT;
+    ```
+    
+    Configure database connection in `dist/db_installer/config/Database.ini`:
+    
+    ```ini
+    Driver = com.mysql.jdbc.Driver
+    URL = jdbc:mysql://localhost/l2jmobiusc4
+    Login = l2jmobius
+    Password = your_password
+    ```
+    
+    Run the Database Installer:
+    
+    ```bash
+    cd build/dist/db_installer
+    java -jar DatabaseInstaller.jar
+    ```
+    
+    Select options:
+    1. Install login and game server schemas
+    2. Create tables and import base data
+  </Step>
+
+  <Step title="Configure Servers">
+    Configure the LoginServer in `dist/login/config/Database.ini`:
+    
+    ```ini
+    URL = jdbc:mysql://localhost/l2jmobiusc4
+    Login = l2jmobius
+    Password = your_password
+    ```
+    
+    Configure the GameServer in `dist/game/config/Database.ini`:
+    
+    ```ini
+    URL = jdbc:mysql://localhost/l2jmobiusc4
+    Login = l2jmobius
+    Password = your_password
+    ```
+    
+    <Info>
+      For local testing, default network settings work out of the box.
+      For public servers, see [Configuration Guide](/setup/configuration).
+    </Info>
+  </Step>
+
+  <Step title="Launch Servers">
+    Start the LoginServer first:
+    
+    ```bash
+    cd build/dist/login
+    ./startLoginServer.sh    # Linux/Mac
+    # or
+    startLoginServer.bat     # Windows
+    ```
+    
+    Wait for "LoginServer is now listening on *:2106" message.
+    
+    Then start the GameServer:
+    
+    ```bash
+    cd build/dist/game
+    ./startGameServer.sh     # Linux/Mac
+    # or
+    startGameServer.bat      # Windows
+    ```
+    
+    Wait for "GameServer is now listening on *:7777" message.
+  </Step>
+
+  <Step title="Create Admin Account">
+    Connect with your Lineage 2 client and create a character.
+    
+    Then grant admin access via MySQL:
+    
+    ```sql
+    USE l2jmobiusc4;
+    UPDATE characters SET accesslevel = 100 WHERE char_name = 'YourCharName';
+    ```
+    
+    Restart the GameServer for changes to take effect.
+    
+    <Warning>
+      Access level 100 grants full GM privileges. Use carefully!
+    </Warning>
+  </Step>
+</Steps>
+
+## Verify Installation
+
+Test your server is working:
 
 <AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
+  <Accordion title="LoginServer Health Check" icon="check">
+    ```bash
+    # Check if LoginServer is listening
+    netstat -an | grep 2106
     
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
+    # Expected output:
+    # tcp    0    0 0.0.0.0:2106    0.0.0.0:*    LISTEN
+    ```
+    
+    Check logs in `dist/login/log/` for any errors.
   </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
+
+  <Accordion title="GameServer Health Check" icon="check">
+    ```bash
+    # Check if GameServer is listening
+    netstat -an | grep 7777
     
-    <Tip>Your preview updates automatically as you edit files.</Tip>
+    # Expected output:
+    # tcp    0    0 0.0.0.0:7777    0.0.0.0:*    LISTEN
+    ```
+    
+    Check logs in `dist/game/log/` for any errors.
+  </Accordion>
+
+  <Accordion title="Database Connection" icon="database">
+    ```sql
+    USE l2jmobiusc4;
+    SELECT COUNT(*) FROM characters;
+    SELECT COUNT(*) FROM items;
+    SELECT COUNT(*) FROM npc;
+    ```
+    
+    All queries should return counts without errors.
   </Accordion>
 </AccordionGroup>
 
-### Step 2: Deploy your changes
+## Common Issues
 
 <AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
+  <Accordion title="Build fails with Java version error" icon="exclamation-triangle">
+    **Solution**: Ensure Java 25 JDK is installed and `JAVA_HOME` is set correctly:
     
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
+    ```bash
+    java -version    # Should show version 25
+    echo $JAVA_HOME  # Should point to JDK 25
+    ```
+  </Accordion>
 
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
+  <Accordion title="Database connection failed" icon="database">
+    **Solution**: Verify MySQL is running and credentials are correct:
+    
+    ```bash
+    # Test connection
+    mysql -u l2jmobius -p -h localhost l2jmobiusc4
+    ```
+    
+    Check `Database.ini` files match your MySQL credentials.
+  </Accordion>
 
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
+  <Accordion title="Port already in use" icon="plug">
+    **Solution**: Check if another service is using ports 2106 or 7777:
+    
+    ```bash
+    # Linux/Mac
+    sudo lsof -i :2106
+    sudo lsof -i :7777
+    
+    # Windows
+    netstat -ano | findstr :2106
+    netstat -ano | findstr :7777
+    ```
+    
+    Stop conflicting services or change ports in server configs.
+  </Accordion>
+
+  <Accordion title="Cannot connect with client" icon="network-wired">
+    **Solution**: Ensure your Lineage 2 client is configured for Chronicle 4 (protocol 656/660).
+    
+    Check `dist/game/config/ipconfig.xml` for correct server IP configuration.
   </Accordion>
 </AccordionGroup>
 
-### Step 3: Go live
+## Next Steps
 
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
+Now that your server is running:
 
 <CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
+  <Card title="Explore Features" icon="sparkles" href="/features">
+    Learn about Olympiad, Seven Signs, and custom systems
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/setup/configuration">
+    Customize rates, features, and gameplay settings
+  </Card>
+  <Card title="Admin Commands" icon="terminal" href="/admin/commands">
+    Master GM commands for server management
+  </Card>
+  <Card title="Scripting Guide" icon="code" href="/scripting/overview">
+    Create custom quests and AI scripts
+  </Card>
 </CardGroup>
 
+## Performance Tips
+
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  For optimal performance:
+  - Allocate sufficient JVM memory: `-Xmx16g -Xms8g` for medium servers
+  - Use MySQL query cache and InnoDB engine
+  - Enable geodata for accurate pathfinding
+  - Configure thread pools in `Threads.ini`
+  - Monitor with `//serverinfo` command in-game
 </Note>
+
+For detailed server configuration, see the [Server Setup](/setup/installation) section.

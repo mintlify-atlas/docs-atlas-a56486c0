@@ -1,0 +1,116 @@
+---
+title: L2J Mobius Chronicle 4 - Scions of Destiny
+description: A robust and feature-rich Lineage 2 Chronicle 4 server emulator built with Java
+---
+
+# Welcome to L2J Mobius Chronicle 4
+
+L2J Mobius Chronicle 4 (Scions of Destiny) is a professional-grade Lineage 2 server emulator that brings the classic Chronicle 4 experience to life. Built on a modern Java 25 codebase with over 1,500 source files, this project offers exceptional stability, performance, and authenticity.
+
+<CardGroup cols={2}>
+  <Card title="Quick Start" icon="rocket" href="/quickstart">
+    Get your server running in minutes with our step-by-step installation guide
+  </Card>
+  <Card title="Features" icon="sparkles" href="/features">
+    Explore the comprehensive feature set including Olympiad, Seven Signs, and custom enhancements
+  </Card>
+  <Card title="Configuration" icon="sliders" href="/setup/configuration">
+    Learn how to configure rates, features, and gameplay mechanics
+  </Card>
+  <Card title="Database Setup" icon="database" href="/setup/database">
+    Set up and manage your MySQL database with our automated installer
+  </Card>
+</CardGroup>
+
+## What is Chronicle 4?
+
+Chronicle 4: Scions of Destiny represents the pinnacle of classic Lineage 2 gameplay, introducing:
+
+- **Major Territories**: Varka Silenos Outpost, Ketra Orc Outpost, Imperial Tomb, Hot Springs, Forge of the Gods, and more
+- **Noblesse System**: Achieve nobility status and unlock exclusive privileges
+- **Heroes & Olympiad**: Compete in ranked PvP battles using an advanced ELO-based matchmaking system
+- **Skill Enchanting**: Enhance your abilities beyond their base power
+- **Epic Raids**: Challenge Valakas, Antharas, Baium, and other legendary bosses
+- **Dimensional Rift**: Explore instanced dungeons with unique rewards
+- **Fishing System**: Relaxing fishing mechanics with valuable catches
+- **Clan Wars**: Territory control and castle sieges with strategic gameplay
+
+## Chronicle Evolution
+
+This emulator includes features from Chronicle 4 and earlier versions:
+
+### Chronicle 3 Features
+- Seven Signs territory control system
+- Subclass system for character progression
+- Community board mail and friends systems
+- Anakim and Lilith raid bosses
+
+### Chronicle 2 Features
+- Castle siege mechanics with destroyable walls and traps
+- Manor system for clan resource management
+- Mini games: Monster Race, Lottery, Dice
+- Baium and Zaken raid encounters
+- Swimming mechanics
+- Boat transportation system
+
+### Chronicle 1 Features
+- Castle siege system with 9 castles
+- Antharas raid encounter
+- Clan halls and clan management
+- Weight system mechanics
+
+### Prelude Features
+- Complete class transfer system
+- Summons and pet mechanics
+- Clan and alliance systems
+- Player-run shops and trading
+
+## Server Architecture
+
+L2J Mobius C4 is built on a robust multi-server architecture:
+
+```
+┌─────────────────┐
+│  Login Server   │ ← Handles authentication
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  Game Server    │ ← Core game logic
+└────────┬────────┘
+         │
+         ▼
+┌─────────────────┐
+│  MySQL Database │ ← Data persistence
+└─────────────────┘
+```
+
+<Note>
+  The server requires **Java 25** to run. Make sure you have the correct JDK installed before proceeding with setup.
+</Note>
+
+## Key Highlights
+
+- **1,500+ Java Classes**: Comprehensive implementation of game mechanics
+- **Advanced Olympiad System**: ELO-based matchmaking with anti-feeding protection
+- **Custom Features**: 30+ optional enhancements including Champion Monsters, Offline Trading, Auto Play, and more
+- **Extensive Configuration**: Fine-tune every aspect with INI-based configuration files
+- **Active Development**: Regular updates and bug fixes from the Mobius team
+- **Thread-Safe Design**: Concurrent architecture optimized for high player counts
+
+## Community & Support
+
+Join the L2J Mobius community:
+
+- **Official Website**: [www.l2jmobius.org](http://www.l2jmobius.org/)
+- **GitHub Repository**: Open source development and issue tracking
+- **Forums**: Community discussions and server showcases
+
+<CardGroup cols={2}>
+  <Card title="Next: Quick Start" icon="forward" href="/quickstart">
+    Begin your server setup journey
+  </Card>
+  <Card title="View Features" icon="list" href="/features">
+    Explore what makes this emulator special
+  </Card>
+</CardGroup>

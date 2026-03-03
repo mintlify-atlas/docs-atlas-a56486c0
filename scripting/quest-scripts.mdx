@@ -1,0 +1,509 @@
+---
+title: 'Quest Scripting Guide'
+description: 'Complete guide to creating quests with real examples from L2J Mobius Chronicle 4'
+---
+
+## Overview
+
+Quests in L2J Mobius are Java classes extending the `Quest` base class. They handle player progression, item rewards, state management, and NPC interactions.
+
+## Quest Structure
+
+Every quest follows this basic structure:
+
+```java
+package quests.Q00419_GetAPet;
+
+import org.l2jmobius.gameserver.model.actor.Npc;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.script.Quest;
+import org.l2jmobius.gameserver.model.script.QuestState;
+import org.l2jmobius.gameserver.model.script.State;
+
+public class Q00419_GetAPet extends Quest {
+    // Quest constants
+    private static final int QUEST_ID = 419;
+    
+    // NPC IDs
+    private static final int MARTIN = 30731;
+    
+    // Item IDs
+    private static final int WOLF_COLLAR = 2375;
+    
+    public Q00419_GetAPet() {
+        super(QUEST_ID, "Get a Pet");
+        registerQuestItems(QUEST_ITEMS);
+        addStartNpc(MARTIN);
+        addTalkId(MARTIN);
+    }
+}
+```
+
+## Quest Components
+
+### 1. Quest Constructor
+
+The constructor registers the quest and sets up NPC interactions:
+
+```java Q00419_GetAPet.java (lines 80-87)
+public Q00419_GetAPet() {
+    super(419, "Get a Pet");
+    registerQuestItems(ANIMAL_LOVER_LIST, ANIMAL_SLAYER_LIST_1, 
+                       ANIMAL_SLAYER_LIST_2, BLOODY_FANG, BLOODY_CLAW);
+    addStartNpc(MARTIN);
+    addTalkId(MARTIN, BELLA, ELLIE, METTY);
+    addKillId(DROPLIST.keySet());
+}
+```
+
+### 2. Event Handlers
+
+Quests respond to three main events:
+
+<Tabs>
+  <Tab title="onEvent">
+    Handles player choices and quest progression:
+    
+    ```java Q00419_GetAPet.java (lines 89-171)
+    @Override
+    public String onEvent(String event, Npc npc, Player player) {
+        String htmltext = event;
+        final QuestState st = getQuestState(player, false);
+        if (st == null) {
+            return htmltext;
+        }
+        
+        switch (event) {
+            case "task": {
+                final int race = player.getRace().ordinal();
+                htmltext = "30731-0" + (race + 4) + ".htm";
+                st.startQuest();
+                giveItems(player, ANIMAL_SLAYER_LIST_1 + race, 1);
+                break;
+            }
+            case "30731-12.htm": {
+                playSound(player, QuestSound.ITEMSOUND_QUEST_MIDDLE);
+                takeItems(player, ANIMAL_SLAYER_LIST_1, 1);
+                giveItems(player, ANIMAL_LOVER_LIST, 1);
+                break;
+            }
+        }
+        
+        return htmltext;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="onTalk">
+    Handles NPC conversations:
+    
+    ```java Q00419_GetAPet.java (lines 173-239)
+    @Override
+    public String onTalk(Npc npc, Player player) {
+        String htmltext = getNoQuestMsg(player);
+        final QuestState st = getQuestState(player, true);
+        
+        switch (st.getState()) {
+            case State.CREATED: {
+                htmltext = (player.getLevel() < 15) ? 
+                    "30731-01.htm" : "30731-02.htm";
+                break;
+            }
+            case State.STARTED: {
+                switch (npc.getId()) {
+                    case MARTIN: {
+                        int proofs = getQuestItemsCount(player, BLOODY_FANG);
+                        if (proofs < 50) {
+                            htmltext = "30731-10.htm";
+                        } else {
+                            htmltext = "30731-11.htm";
+                        }
+                        break;
+                    }
+                }
+                break;
+            }
+        }
+        
+        return htmltext;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="onKill">
+    Handles monster kills and item drops:
+    
+    ```java Q00419_GetAPet.java (lines 241-266)
+    @Override
+    public void onKill(Npc npc, Player player, boolean isPet) {
+        final QuestState st = getQuestState(player, false);
+        if ((st == null) || !st.isStarted()) {
+            return;
+        }
+        
+        final int[] drop = DROPLIST.get(npc.getId());
+        if (hasQuestItems(player, drop[0] - 5)) {
+            if (getQuestItemsCount(player, drop[0]) < 50) {
+                giveItems(player, drop[0], 1);
+                if (getQuestItemsCount(player, drop[0]) < 50) {
+                    playSound(player, QuestSound.ITEMSOUND_QUEST_ITEMGET);
+                } else {
+                    playSound(player, QuestSound.ITEMSOUND_QUEST_MIDDLE);
+                }
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Quest State Management
+
+### Quest States
+
+Quests track player progress using states:
+
+| State | Description |
+|-------|-------------|
+| `State.CREATED` | Quest available but not started |
+| `State.STARTED` | Quest in progress |
+| `State.COMPLETED` | Quest finished successfully |
+
+### QuestState Methods
+
+```java
+// Get or create quest state
+final QuestState st = getQuestState(player, true);
+
+// Start the quest
+st.startQuest();
+
+// Set custom variables
+st.set("progress", "1");
+st.set("kills", String.valueOf(count));
+
+// Get custom variables
+int progress = st.getInt("progress");
+
+// Complete quest
+st.exitQuest(true, true); // (repeatable, playExitSound)
+```
+
+## Item Management
+
+### Giving Items
+
+```java
+// Give single item
+giveItems(player, WOLF_COLLAR, 1);
+
+// Give multiple items
+giveItems(player, ADENA, 5000);
+
+// Give items with chance
+if (getRandom(100) < 50) {
+    giveItems(player, RARE_ITEM, 1);
+}
+```
+
+### Taking Items
+
+```java
+// Take specific amount
+takeItems(player, QUEST_ITEM, 10);
+
+// Take all
+takeItems(player, QUEST_ITEM, -1);
+
+// Check if player has items
+if (hasQuestItems(player, QUEST_ITEM)) {
+    // Player has at least one
+}
+
+if (getQuestItemsCount(player, QUEST_ITEM) >= 50) {
+    // Player has 50 or more
+}
+```
+
+### Registering Quest Items
+
+Quest items are automatically deleted when quest ends:
+
+```java
+registerQuestItems(BLOODY_FANG, BLOODY_CLAW, BLOODY_NAIL);
+```
+
+## Drop Configuration
+
+Configure monster drops using Maps:
+
+```java Q00419_GetAPet.java (lines 59-78)
+private static final Map<Integer, int[]> DROPLIST = new HashMap<>();
+static {
+    // NPC_ID -> {ITEM_ID, DROP_CHANCE (in 1000000)}
+    DROPLIST.put(20103, new int[]{BLOODY_FANG, 600000}); // 60%
+    DROPLIST.put(20106, new int[]{BLOODY_FANG, 750000}); // 75%
+    DROPLIST.put(20108, new int[]{BLOODY_FANG, 1000000}); // 100%
+    DROPLIST.put(20460, new int[]{BLOODY_CLAW, 600000});
+    DROPLIST.put(20308, new int[]{BLOODY_CLAW, 750000});
+}
+```
+
+Register drops in constructor:
+
+```java
+addKillId(DROPLIST.keySet());
+```
+
+## Quest Sounds
+
+Provide audio feedback to players:
+
+```java
+import org.l2jmobius.gameserver.model.script.QuestSound;
+
+// Quest progress
+playSound(player, QuestSound.ITEMSOUND_QUEST_ITEMGET);
+
+// Quest milestone
+playSound(player, QuestSound.ITEMSOUND_QUEST_MIDDLE);
+
+// Quest completion
+playSound(player, QuestSound.ITEMSOUND_QUEST_FINISH);
+```
+
+## HTML Dialog Files
+
+Quest dialogs are stored in `dist/game/data/html/` directory:
+
+```
+html/
+└── default/
+    └── 30731.htm        # NPC greeting
+    └── 30731-01.htm     # Level requirement fail
+    └── 30731-02.htm     # Quest start dialog
+    └── 30731-10.htm     # Not enough items
+```
+
+Return HTML file names from event handlers:
+
+```java
+if (player.getLevel() < 15) {
+    return "30731-01.htm"; // Show level requirement
+}
+return "30731-02.htm"; // Show quest start
+```
+
+## Complete Quest Example
+
+Here's a simplified hunting quest:
+
+```java
+package quests.Q00001_SimpleHunt;
+
+import java.util.HashMap;
+import java.util.Map;
+
+import org.l2jmobius.gameserver.model.actor.Npc;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.script.Quest;
+import org.l2jmobius.gameserver.model.script.QuestSound;
+import org.l2jmobius.gameserver.model.script.QuestState;
+import org.l2jmobius.gameserver.model.script.State;
+
+public class Q00001_SimpleHunt extends Quest {
+    // NPCs
+    private static final int GUARD = 30001;
+    
+    // Monsters
+    private static final int WOLF = 20001;
+    private static final int BEAR = 20002;
+    
+    // Items
+    private static final int WOLF_PELT = 1001;
+    private static final int BEAR_SKIN = 1002;
+    private static final int ADENA = 57;
+    
+    // Drop rates (chance out of 1,000,000)
+    private static final Map<Integer, int[]> DROPS = new HashMap<>();
+    static {
+        DROPS.put(WOLF, new int[]{WOLF_PELT, 700000}); // 70%
+        DROPS.put(BEAR, new int[]{BEAR_SKIN, 500000}); // 50%
+    }
+    
+    public Q00001_SimpleHunt() {
+        super(1, "Simple Hunt");
+        registerQuestItems(WOLF_PELT, BEAR_SKIN);
+        addStartNpc(GUARD);
+        addTalkId(GUARD);
+        addKillId(DROPS.keySet());
+    }
+    
+    @Override
+    public String onEvent(String event, Npc npc, Player player) {
+        final QuestState qs = getQuestState(player, false);
+        if (qs == null) return null;
+        
+        if (event.equals("accept")) {
+            qs.startQuest();
+            return "30001-02.htm";
+        }
+        
+        return null;
+    }
+    
+    @Override
+    public String onTalk(Npc npc, Player player) {
+        final QuestState qs = getQuestState(player, true);
+        String htmltext = getNoQuestMsg(player);
+        
+        switch (qs.getState()) {
+            case State.CREATED:
+                htmltext = player.getLevel() >= 10 ? 
+                    "30001-01.htm" : "30001-00.htm";
+                break;
+                
+            case State.STARTED:
+                long pelts = getQuestItemsCount(player, WOLF_PELT);
+                long skins = getQuestItemsCount(player, BEAR_SKIN);
+                
+                if (pelts >= 10 && skins >= 5) {
+                    // Quest complete
+                    takeItems(player, WOLF_PELT, -1);
+                    takeItems(player, BEAR_SKIN, -1);
+                    giveItems(player, ADENA, 5000);
+                    addExpAndSp(player, 50000, 2000);
+                    qs.exitQuest(false, true);
+                    htmltext = "30001-04.htm";
+                } else {
+                    htmltext = "30001-03.htm";
+                }
+                break;
+                
+            case State.COMPLETED:
+                htmltext = "30001-05.htm";
+                break;
+        }
+        
+        return htmltext;
+    }
+    
+    @Override
+    public void onKill(Npc npc, Player player, boolean isSummon) {
+        final QuestState qs = getQuestState(player, false);
+        if (qs == null || !qs.isStarted()) return;
+        
+        final int[] drop = DROPS.get(npc.getId());
+        if (getRandom(1000000) < drop[1]) {
+            giveItems(player, drop[0], 1);
+            playSound(player, QuestSound.ITEMSOUND_QUEST_ITEMGET);
+        }
+    }
+}
+```
+
+## Registering Your Quest
+
+Add your quest to `QuestMasterHandler.java`:
+
+<Steps>
+
+<Step title="Import your quest class">
+```java
+import quests.Q00001_SimpleHunt.Q00001_SimpleHunt;
+```
+</Step>
+
+<Step title="Add to QUESTS array">
+```java
+private static final Class<?>[] QUESTS = {
+    Q00001_SimpleHunt.class,
+    // ... other quests
+};
+```
+</Step>
+
+<Step title="Reload scripts">
+```bash
+//reload scripts
+```
+</Step>
+
+</Steps>
+
+## Advanced Features
+
+### Timed Quests
+
+```java
+// Start timer (name, time in ms, npc, player)
+startQuestTimer("timeout", 3600000, null, player);
+
+// Cancel timer
+cancelQuestTimer("timeout", null, player);
+
+// Handle timer
+@Override
+public String onAdvEvent(String event, Npc npc, Player player) {
+    if (event.equals("timeout")) {
+        // Quest failed due to timeout
+        final QuestState qs = getQuestState(player, false);
+        qs.exitQuest(true);
+    }
+    return null;
+}
+```
+
+### Multi-Stage Quests
+
+```java
+st.set("stage", "1");
+
+switch (st.getInt("stage")) {
+    case 1:
+        htmltext = "Find 10 wolf pelts";
+        break;
+    case 2:
+        htmltext = "Bring items to guard";
+        break;
+}
+```
+
+### Repeatable Quests
+
+```java
+// Daily repeatable
+st.exitQuest(QuestType.DAILY, true);
+
+// Always repeatable  
+st.exitQuest(true, true);
+
+// One-time only
+st.exitQuest(false, true);
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Use Constants">
+    Define all IDs as constants at the top of the class for easy maintenance.
+  </Accordion>
+  
+  <Accordion title="Null Checks">
+    Always check if QuestState exists before accessing it.
+  </Accordion>
+  
+  <Accordion title="HTML Files">
+    Keep quest dialogs in HTML files rather than hardcoding strings.
+  </Accordion>
+  
+  <Accordion title="Sound Feedback">
+    Use appropriate sounds for better player experience.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="AI Scripts" icon="brain" href="/scripting/ai-scripts">
+  Learn how to create custom AI for NPCs and bosses
+</Card>

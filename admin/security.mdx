@@ -1,0 +1,473 @@
+---
+title: 'Security Configuration'
+description: 'Access levels, permissions, and security features for L2J Mobius Chronicle 4'
+icon: 'shield'
+---
+
+Properly configuring security and access levels is critical for protecting your server and ensuring administrators have appropriate permissions.
+
+## Access Levels Overview
+
+Access levels control what commands and abilities each administrator tier can use. They are configured in:
+
+```
+dist/game/config/AccessLevels.xml
+```
+
+### Access Level Structure
+
+Each access level defines:
+
+- **Level:** Numeric identifier (-1 to 100)
+- **Name:** Descriptive role name
+- **Name Color:** Character name color in hex
+- **Title Color:** Character title color in hex
+- **Child Access:** Inherited permissions from lower level
+- **Permissions:** Specific capabilities (isGM, allowPeaceAttack, etc.)
+
+**Source:** `dist/game/config/AccessLevels.xml:2`
+
+## Default Access Levels
+
+<AccordionGroup>
+  <Accordion title="Level -1: Banned" icon="ban">
+    **Purpose:** Punished/banned accounts
+    
+    **Permissions:**
+    - Name Color: `FFFFFF` (white)
+    - Title Color: `ECF9A2` (light yellow)
+    - `isGM`: false
+    - `allowPeaceAttack`: false
+    - `allowTransaction`: false
+    - `giveDamage`: false
+    - `takeAggro`: false
+    - `gainExp`: false
+    
+    <Warning>
+    Banned users cannot perform any game actions.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Level 0: User" icon="user">
+    **Purpose:** Regular players
+    
+    **Permissions:**
+    - Name Color: `FFFFFF` (white)
+    - Title Color: `ECF9A2` (light yellow)
+    - `isGM`: false
+    - `allowTransaction`: true
+    - `giveDamage`: true
+    - `takeAggro`: true
+    - `gainExp`: true
+    
+    Standard player account with full gameplay capabilities.
+  </Accordion>
+
+  <Accordion title="Level 10: Chat Moderator" icon="comments">
+    **Purpose:** Moderation of chat/social features
+    
+    **Permissions:**
+    - Inherits from: User (level 0)
+    - Name Color: `FFFFFF` (white)
+    - Limited administrative powers
+    - Can moderate chat but not modify game state
+    
+    <Note>
+    Suitable for community moderators who don't need full GM powers.
+    </Note>
+  </Accordion>
+
+  <Accordion title="Level 20: Test GM" icon="flask">
+    **Purpose:** Testing and development
+    
+    **Permissions:**
+    - Inherits from: Chat Moderator (level 10)
+    - Name Color: `FFFFFF` (white)
+    - `allowFixedRes`: true
+    - `allowAltg`: true (Alt+G command)
+    - `giveDamage`: false
+    - `gainExp`: false
+    
+    For QA and testing without affecting game balance.
+  </Accordion>
+
+  <Accordion title="Level 30: General GM" icon="user-shield">
+    **Purpose:** Standard game master
+    
+    **Permissions:**
+    - Inherits from: Test GM (level 20)
+    - Name Color: `0000C0` (blue)
+    - Title Color: `0000C0` (blue)
+    - Standard GM capabilities
+    - Cannot trade or gain experience
+    
+    Most common GM tier for player support.
+  </Accordion>
+
+  <Accordion title="Level 40: Support GM" icon="headset">
+    **Purpose:** Player support and assistance
+    
+    **Permissions:**
+    - Inherits from: General GM (level 30)
+    - Name Color: `000C00` (dark green)
+    - Title Color: `000C00` (dark green)
+    - Enhanced support capabilities
+    
+    For dedicated customer support staff.
+  </Accordion>
+
+  <Accordion title="Level 50: Event GM" icon="calendar">
+    **Purpose:** Event management and coordination
+    
+    **Permissions:**
+    - Inherits from: Support GM (level 40)
+    - Name Color: `00C000` (green)
+    - Title Color: `00C000` (green)
+    - Event-specific powers
+    
+    For GMs who run server events and activities.
+  </Accordion>
+
+  <Accordion title="Level 60: Head GM" icon="crown">
+    **Purpose:** Senior administrator
+    
+    **Permissions:**
+    - Inherits from: Event GM (level 50)
+    - Name Color: `0C0000` (dark red)
+    - Title Color: `0C0000` (dark red)
+    - `allowTransaction`: true
+    - `giveDamage`: true
+    - `takeAggro`: true
+    - `gainExp`: true
+    
+    Senior GM with near-full capabilities.
+  </Accordion>
+
+  <Accordion title="Level 70: Admin" icon="user-gear">
+    **Purpose:** Full server administrator
+    
+    **Permissions:**
+    - Inherits from: Head GM (level 60)
+    - Name Color: `0FF000` (bright green)
+    - Title Color: `0FF000` (bright green)
+    - `isGM`: true
+    - `allowPeaceAttack`: true
+    - Full administrative access
+    
+    Complete server control except master commands.
+  </Accordion>
+
+  <Accordion title="Level 100: Master" icon="star">
+    **Purpose:** Server owner/master administrator
+    
+    **Permissions:**
+    - Inherits from: Admin (level 70)
+    - Name Color: `00CCFF` (cyan)
+    - Title Color: `00CCFF` (cyan)
+    - `isGM`: true
+    - Unrestricted access to all commands
+    
+    <Warning>
+    Only assign to trusted server owners/developers.
+    </Warning>
+  </Accordion>
+</AccordionGroup>
+
+## Permission Flags
+
+### Core Permissions
+
+<CardGroup cols={2}>
+  <Card title="isGM" icon="badge-check">
+    Identifies user as game master. Required for most admin commands.
+  </Card>
+  <Card title="allowPeaceAttack" icon="hand-fist">
+    Allows attacking in peace zones and non-PvP areas.
+  </Card>
+  <Card title="allowFixedRes" icon="heart">
+    Enables fixed resurrection (no penalties).
+  </Card>
+  <Card title="allowTransaction" icon="coins">
+    Permits trading and economic transactions.
+  </Card>
+  <Card title="allowAltg" icon="keyboard">
+    Grants access to Alt+G admin panel.
+  </Card>
+  <Card title="giveDamage" icon="burst">
+    Ability to deal damage to other entities.
+  </Card>
+  <Card title="takeAggro" icon="crosshairs">
+    Whether NPCs can aggro this character.
+  </Card>
+  <Card title="gainExp" icon="arrow-up">
+    Whether character gains experience points.
+  </Card>
+</CardGroup>
+
+## Admin Command Permissions
+
+Commands are restricted by access level in:
+
+```
+dist/game/config/AdminCommands.xml
+```
+
+### Command Access Control
+
+Each command specifies minimum required access level:
+
+```xml
+<command name="admin_server_shutdown" accessLevel="100" />
+<command name="admin_teleport" accessLevel="30" />
+<command name="admin_kick" accessLevel="40" />
+```
+
+<Note>
+Customize command access levels to match your server's security policy.
+</Note>
+
+## GM List Visibility
+
+### GM List Management
+
+Control whether GMs appear in the `/gmlist` command:
+
+```bash
+//gmliston   # Add to GM list (visible)
+//gmlistoff  # Remove from GM list (hidden)
+```
+
+**Source:** `handlers/admincommandhandlers/AdminAdmin.java:55`
+
+<Accordion title="GM List Implementation">
+  ```java
+  AdminData.getInstance().addGm(activeChar, false);  // Add to list
+  AdminData.getInstance().addGm(activeChar, true);   // Remove from list
+  ```
+  
+  **Use cases:**
+  - `gmliston`: GM assistance mode (players can see you)
+  - `gmlistoff`: Invisible monitoring mode
+</Accordion>
+
+## Punishment System
+
+### Punishment Types
+
+The server supports multiple punishment mechanisms:
+
+<AccordionGroup>
+  <Accordion title="Character Ban" icon="user-slash">
+    Prevents specific character from logging in.
+    
+    **Command:** `//ban_char <character_name>`
+    
+    **Affect:** Single character only
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:369`
+  </Accordion>
+
+  <Accordion title="Account Ban" icon="lock">
+    Blocks entire account from accessing server.
+    
+    **Command:** `//ban_acc <account_name>`
+    
+    **Affect:** All characters on account
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:385`
+  </Accordion>
+
+  <Accordion title="IP Ban" icon="network-wired">
+    Blocks all connections from IP address.
+    
+    **Protection:** Validates against localhost and server IP
+    
+    ```java
+    if (addr.isLoopbackAddress()) {
+        throw new UnknownHostException("You cannot ban any local address!");
+    }
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:293`
+  </Accordion>
+
+  <Accordion title="HWID Ban" icon="microchip">
+    Hardware-based ban (bypasses IP changes).
+    
+    **Command:** `//ban_hwid <hardware_id>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:401`
+  </Accordion>
+
+  <Accordion title="Chat Ban" icon="comment-slash">
+    Restricts chat without blocking gameplay.
+    
+    **Command:** `//ban_chat <player_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:417`
+  </Accordion>
+
+  <Accordion title="Jail" icon="handcuffs">
+    Imprisons character in jail zone.
+    
+    **Command:** `//jail <player_name>`
+    
+    **Source:** `handlers/admincommandhandlers/AdminPunishment.java:433`
+  </Accordion>
+</AccordionGroup>
+
+### Punishment Expiration
+
+Punishments can be temporary or permanent:
+
+```bash
+//punishment_add <key> <affect> <type> <minutes> <reason>
+```
+
+**Parameters:**
+- `key`: Username, character name, IP, or HWID
+- `affect`: ACCOUNT, CHARACTER, IP, or HWID
+- `type`: BAN, CHAT_BAN, or JAIL
+- `minutes`: Duration (-1 for permanent)
+- `reason`: Explanation text
+
+**Example:**
+```bash
+//punishment_add PlayerName CHARACTER CHAT_BAN 60 Spamming
+```
+
+**Source:** `handlers/admincommandhandlers/AdminPunishment.java:222`
+
+## Security Best Practices
+
+<Warning>
+**Critical Security Guidelines**
+
+1. **Minimize Master Access:** Only 1-2 trusted individuals should have level 100
+2. **Audit Logs:** Regularly review GM action logs in `dist/game/log/audit.log`
+3. **Access Review:** Periodically review all GM accounts and remove inactive ones
+4. **Strong Passwords:** Enforce strong password policies for admin accounts
+5. **IP Whitelist:** Consider IP restrictions for high-level admin access
+</Warning>
+
+### GM Action Auditing
+
+All administrative actions are logged:
+
+```java
+GMAudit.logAction(activeChar.getName() + " [" + activeChar.getObjectId() + "]",
+                  cmd, affect.name(), name);
+```
+
+**Logged information:**
+- GM character name and object ID
+- Command executed
+- Target player/entity
+- Timestamp
+
+**Source:** `handlers/admincommandhandlers/AdminPunishment.java:320`
+
+### Protecting Server IP
+
+The punishment system prevents banning the server's own IP:
+
+```java
+if (ServerConfig.GAME_SERVER_HOSTS.contains(addr.getHostAddress())) {
+    throw new UnknownHostException("You cannot ban your gameserver's address!");
+}
+```
+
+**Source:** `handlers/admincommandhandlers/AdminPunishment.java:298`
+
+## Database Security
+
+### Access Level Storage
+
+Access levels are stored in the database:
+
+**Table:** `characters`
+**Column:** `accesslevel`
+
+### Changing Access Levels
+
+**In-game command:**
+```bash
+//changeaccesslevel <player_name> <level>
+```
+
+**Direct database update:**
+```sql
+UPDATE characters SET accesslevel = 70 WHERE char_name = 'AdminName';
+```
+
+<Warning>
+Always restart the character or use `//character_reload` after database changes.
+</Warning>
+
+## Flood Protection
+
+Protect against command spam in `dist/game/config/FloodProtector.ini`:
+
+```ini
+# Admin command flood protection
+AdminCommandFloodProtector = True
+AdminCommandInterval = 100
+AdminCommandMaxAttempts = 10
+```
+
+## Network Security
+
+### Connection Limits
+
+Configure in `dist/game/config/Network.ini`:
+
+```ini
+# Maximum connections per IP
+MaximumConnectionsPerIP = 5
+
+# Enable packet encryption
+EnablePacketEncryption = True
+```
+
+### DDoS Protection
+
+Implement at infrastructure level:
+- Use a firewall (iptables, UFW)
+- Consider DDoS protection service
+- Rate-limit incoming connections
+- Monitor for unusual traffic patterns
+
+## Configuration Files Security
+
+### File Permissions
+
+Restrict access to configuration files:
+
+```bash
+chmod 600 dist/game/config/Database.ini
+chmod 600 dist/game/config/AccessLevels.xml
+chown gameserver:gameserver dist/game/config/*
+```
+
+### Sensitive Data
+
+<Warning>
+Never commit these files to public repositories:
+- `Database.ini` (contains DB credentials)
+- `Network.ini` (contains encryption keys)
+- `AccessLevels.xml` (security configuration)
+</Warning>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Admin Commands" icon="terminal" href="/admin/commands">
+    Complete command reference
+  </Card>
+  <Card title="Monitoring" icon="chart-line" href="/admin/monitoring">
+    Audit logs and monitoring
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/admin/troubleshooting">
+    Security-related issues
+  </Card>
+</CardGroup>

@@ -1,0 +1,550 @@
+---
+title: 'Handler System'
+description: 'Extend game functionality with item handlers, admin commands, and effect handlers'
+---
+
+## Overview
+
+Handlers are specialized scripts that extend core game functionality. Unlike quests and AI scripts, handlers implement specific interfaces and are automatically registered with the HandlerManager.
+
+## Handler Types
+
+L2J Mobius supports multiple handler categories:
+
+<CardGroup cols={2}>
+  <Card title="Item Handlers" icon="bag-shopping">
+    Control item usage behavior (potions, scrolls, shots)
+  </Card>
+  <Card title="Admin Commands" icon="terminal">
+    GM commands for server administration
+  </Card>
+  <Card title="Voiced Commands" icon="microphone">
+    Player commands (`.menu`, `.online`, etc.)
+  </Card>
+  <Card title="Effect Handlers" icon="sparkles">
+    Skill effect implementations
+  </Card>
+  <Card title="Target Handlers" icon="crosshairs">
+    Skill targeting logic
+  </Card>
+  <Card title="User Commands" icon="user">
+    Built-in user commands (`/loc`, `/time`)
+  </Card>
+</CardGroup>
+
+## Item Handlers
+
+Item handlers control what happens when players use items.
+
+### Structure
+
+```java handlers/itemhandlers/SoulShots.java
+package handlers.itemhandlers;
+
+import org.l2jmobius.gameserver.handler.IItemHandler;
+import org.l2jmobius.gameserver.model.actor.Playable;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.item.instance.Item;
+
+public class SoulShots implements IItemHandler {
+    @Override
+    public boolean onItemUse(Playable playable, Item item, boolean forceUse) {
+        if (!playable.isPlayer()) {
+            playable.sendPacket(SystemMessageId.ITEM_NOT_AVAILABLE_FOR_PETS);
+            return false;
+        }
+        
+        final Player player = playable.asPlayer();
+        
+        // Handler logic here
+        
+        return true; // Item used successfully
+    }
+}
+```
+
+### Real Example: Soul Shots
+
+```java handlers/itemhandlers/SoulShots.java (lines 39-114)
+public class SoulShots implements IItemHandler {
+    @Override
+    public boolean onItemUse(Playable playable, Item item, boolean forceUse) {
+        if (!playable.isPlayer()) {
+            playable.sendPacket(SystemMessageId.ITEM_NOT_AVAILABLE_FOR_PETS);
+            return false;
+        }
+        
+        final Player player = playable.asPlayer();
+        final Item weaponInst = player.getActiveWeaponInstance();
+        final Weapon weaponItem = player.getActiveWeaponItem();
+        final int itemId = item.getId();
+        
+        // Check if Soul shot can be used
+        if ((weaponInst == null) || (weaponItem.getSoulShotCount() == 0)) {
+            if (!player.getAutoSoulShot().contains(itemId)) {
+                player.sendPacket(SystemMessageId.CANNOT_USE_SOULSHOTS);
+            }
+            return false;
+        }
+        
+        // Verify weapon grade matches shot grade
+        final boolean gradeCheck = item.isEtcItem() && 
+            (weaponInst.getTemplate().getCrystalTypePlus() == item.getTemplate().getCrystalTypePlus());
+        
+        if (!gradeCheck) {
+            if (!player.getAutoSoulShot().contains(itemId)) {
+                player.sendPacket(SystemMessageId.SOULSHOT_DOES_NOT_MATCH_WEAPON_GRADE);
+            }
+            return false;
+        }
+        
+        // Check if already charged
+        if (player.isChargedShot(ShotType.SOULSHOTS)) {
+            return false;
+        }
+        
+        // Consume shots
+        int count = weaponItem.getSoulShotCount();
+        if ((weaponItem.getReducedSoulShot() > 0) && 
+            (Rnd.get(100) < weaponItem.getReducedSoulShotChance())) {
+            count = weaponItem.getReducedSoulShot();
+        }
+        
+        if (!player.destroyItem(ItemProcessType.NONE, item.getObjectId(), count, null, false)) {
+            if (!player.disableAutoShot(itemId)) {
+                player.sendPacket(SystemMessageId.NOT_ENOUGH_SOULSHOTS);
+            }
+            return false;
+        }
+        
+        // Charge soul shot
+        weaponInst.setChargedShot(ShotType.SOULSHOTS, true);
+        
+        // Visual feedback
+        player.sendPacket(SystemMessageId.POWER_OF_THE_SPIRITS_ENABLED);
+        Broadcast.toSelfAndKnownPlayersInRadius(player, 
+            new MagicSkillUse(player, player, skills[0].getSkillId(), skills[0].getSkillLevel(), 0, 0), 600);
+        
+        return true;
+    }
+}
+```
+
+### Simple Item Handler Example
+
+```java
+package handlers.itemhandlers;
+
+import org.l2jmobius.gameserver.handler.IItemHandler;
+import org.l2jmobius.gameserver.model.actor.Playable;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.item.instance.Item;
+
+public class CustomPotion implements IItemHandler {
+    @Override
+    public boolean onItemUse(Playable playable, Item item, boolean forceUse) {
+        if (!playable.isPlayer()) {
+            return false;
+        }
+        
+        final Player player = playable.asPlayer();
+        
+        // Check if player can use
+        if (player.isInCombat()) {
+            player.sendMessage("Cannot use in combat!");
+            return false;
+        }
+        
+        // Consume item
+        if (!player.destroyItem("Consume", item.getObjectId(), 1, null, false)) {
+            return false;
+        }
+        
+        // Apply effect
+        player.setCurrentHp(player.getMaxHp());
+        player.setCurrentMp(player.getMaxMp());
+        player.sendMessage("Full HP/MP restored!");
+        
+        return true;
+    }
+}
+```
+
+## Admin Command Handlers
+
+Admin commands provide GM tools for server management.
+
+### Structure
+
+```java
+package handlers.admincommandhandlers;
+
+import org.l2jmobius.gameserver.handler.IAdminCommandHandler;
+import org.l2jmobius.gameserver.model.actor.Player;
+
+public class AdminCustom implements IAdminCommandHandler {
+    private static final String[] ADMIN_COMMANDS = {
+        "admin_custom",
+        "admin_custom_option1",
+        "admin_custom_option2"
+    };
+    
+    @Override
+    public boolean onCommand(String command, Player activeChar) {
+        // Command implementation
+        return true;
+    }
+    
+    @Override
+    public String[] getCommandList() {
+        return ADMIN_COMMANDS;
+    }
+}
+```
+
+### Real Example: Admin Spawn
+
+From `AdminSpawn.java`:
+
+```java handlers/admincommandhandlers/AdminSpawn.java (lines 391-471)
+else if (command.startsWith("admin_spawn_monster") || command.startsWith("admin_spawn")) {
+    try {
+        final StringTokenizer st = new StringTokenizer(command, " ");
+        final String cmd = st.nextToken();
+        String npcId = st.nextToken();
+        
+        // Support spawning by name
+        if (!StringUtil.isNumeric(npcId)) {
+            final StringBuilder searchParam = new StringBuilder();
+            NpcTemplate template = null;
+            int pos = 1;
+            
+            // Find NPC by name
+            for (int i = 1; i < params.length; i++) {
+                searchParam.append(params[i]);
+                searchParam.append(" ");
+                
+                NpcTemplate searchTemplate = NpcData.getInstance()
+                    .getTemplateByName(searchParam.toString().trim());
+                
+                if (searchTemplate != null) {
+                    template = searchTemplate;
+                    pos = i;
+                }
+            }
+            
+            if (template != null) {
+                npcId = String.valueOf(template.getId());
+            }
+        }
+        
+        // Get mob count (default 1)
+        int mobCount = 1;
+        if (st.hasMoreTokens()) {
+            mobCount = Integer.parseInt(st.nextToken());
+        }
+        
+        // Get respawn time (default 60)
+        int respawnTime = 60;
+        if (st.hasMoreTokens()) {
+            respawnTime = Integer.parseInt(st.nextToken());
+        }
+        
+        // Spawn the NPC
+        spawnMonster(activeChar, npcId, respawnTime, mobCount, 
+            !cmd.equalsIgnoreCase("admin_spawn_once"));
+    } catch (Exception e) {
+        AdminHtml.showAdminHtml(activeChar, "spawns.htm");
+    }
+}
+```
+
+### Simple Admin Command
+
+```java
+package handlers.admincommandhandlers;
+
+import org.l2jmobius.gameserver.handler.IAdminCommandHandler;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.World;
+
+public class AdminHeal implements IAdminCommandHandler {
+    private static final String[] ADMIN_COMMANDS = {
+        "admin_heal",
+        "admin_heal_all"
+    };
+    
+    @Override
+    public boolean onCommand(String command, Player activeChar) {
+        if (command.equals("admin_heal")) {
+            // Heal target or self
+            final Player target = activeChar.getTarget() != null && 
+                activeChar.getTarget().isPlayer() ? 
+                activeChar.getTarget().asPlayer() : activeChar;
+            
+            target.setCurrentHp(target.getMaxHp());
+            target.setCurrentMp(target.getMaxMp());
+            target.setCurrentCp(target.getMaxCp());
+            activeChar.sendMessage("Healed " + target.getName());
+        } 
+        else if (command.equals("admin_heal_all")) {
+            // Heal all online players
+            int count = 0;
+            for (Player player : World.getInstance().getPlayers()) {
+                player.setCurrentHp(player.getMaxHp());
+                player.setCurrentMp(player.getMaxMp());
+                player.setCurrentCp(player.getMaxCp());
+                count++;
+            }
+            activeChar.sendMessage("Healed " + count + " players");
+        }
+        
+        return true;
+    }
+    
+    @Override
+    public String[] getCommandList() {
+        return ADMIN_COMMANDS;
+    }
+}
+```
+
+## Voiced Command Handlers
+
+Voiced commands are player-accessible commands starting with `.`
+
+### Structure
+
+```java
+package handlers.voicedcommandhandlers;
+
+import org.l2jmobius.gameserver.handler.IVoicedCommandHandler;
+import org.l2jmobius.gameserver.model.actor.Player;
+
+public class Online implements IVoicedCommandHandler {
+    private static final String[] VOICED_COMMANDS = {
+        "online"
+    };
+    
+    @Override
+    public boolean onVoicedCommand(String command, Player activeChar, String params) {
+        if (command.equals("online")) {
+            int count = World.getInstance().getPlayers().size();
+            activeChar.sendMessage("Players online: " + count);
+        }
+        return true;
+    }
+    
+    @Override
+    public String[] getVoicedCommandList() {
+        return VOICED_COMMANDS;
+    }
+}
+```
+
+## Effect Handlers
+
+Effect handlers define skill effect behavior.
+
+### Structure
+
+```java
+package handlers.effecthandlers;
+
+import org.l2jmobius.gameserver.model.StatSet;
+import org.l2jmobius.gameserver.model.actor.Creature;
+import org.l2jmobius.gameserver.model.effects.AbstractEffect;
+import org.l2jmobius.gameserver.model.skill.BuffInfo;
+
+public class CustomEffect extends AbstractEffect {
+    private final double _power;
+    
+    public CustomEffect(StatSet params) {
+        _power = params.getDouble("power", 0);
+    }
+    
+    @Override
+    public void onStart(Creature effector, Creature effected, BuffInfo info) {
+        // Effect starts
+    }
+    
+    @Override
+    public boolean onActionTime(Creature effector, Creature effected, BuffInfo info) {
+        // Periodic tick
+        return true; // Continue ticking
+    }
+    
+    @Override
+    public void onExit(Creature effector, Creature effected, BuffInfo info) {
+        // Effect ends
+    }
+}
+```
+
+## Handler Registration
+
+Handlers are automatically discovered and registered if placed in the correct package.
+
+### Master Handler Pattern
+
+Some handler types use a master handler class:
+
+```java
+package handlers;
+
+import handlers.itemhandlers.*;
+
+public class ItemHandler {
+    public ItemHandler() {
+        // Register all item handlers
+        HandlerManager.getInstance().registerHandler(new SoulShots());
+        HandlerManager.getInstance().registerHandler(new SpiritShot());
+        HandlerManager.getInstance().registerHandler(new CustomPotion());
+    }
+    
+    public static void main(String[] args) {
+        new ItemHandler();
+    }
+}
+```
+
+## Handler Configuration
+
+### Item Template Configuration
+
+Link items to handlers in `data/stats/items/*.xml`:
+
+```xml
+<item id="1835" name="Soul Shot: D-Grade" type="EtcItem">
+    <set name="handler" val="SoulShots" />
+    <set name="default_action" val="SOULSHOT" />
+    <set name="crystal_type" val="D" />
+</item>
+```
+
+### Skill Configuration
+
+Link skills to effect handlers:
+
+```xml
+<skill id="1002" name="Heal">
+    <effects>
+        <effect name="Heal" power="100" />
+    </effects>
+</skill>
+```
+
+## Common Handler Patterns
+
+### Validation Pattern
+
+```java
+@Override
+public boolean onItemUse(Playable playable, Item item, boolean forceUse) {
+    // 1. Type check
+    if (!playable.isPlayer()) {
+        return false;
+    }
+    
+    final Player player = playable.asPlayer();
+    
+    // 2. State validation
+    if (player.isDead() || player.isInOlympiad()) {
+        player.sendMessage("Cannot use here");
+        return false;
+    }
+    
+    // 3. Resource check
+    if (!player.destroyItem("Consume", item.getObjectId(), 1, null, false)) {
+        return false;
+    }
+    
+    // 4. Apply effect
+    // ...
+    
+    return true;
+}
+```
+
+### Command Parsing Pattern
+
+```java handlers/admincommandhandlers/AdminSpawn.java (lines 369-389)
+if (command.startsWith("admin_spawnat")) {
+    final StringTokenizer st = new StringTokenizer(command, " ");
+    try {
+        st.nextToken(); // command name
+        final String id = st.nextToken();
+        final String x = st.nextToken();
+        final String y = st.nextToken();
+        final String z = st.nextToken();
+        int h = activeChar.getHeading();
+        if (st.hasMoreTokens()) {
+            h = Integer.parseInt(st.nextToken());
+        }
+        
+        spawnMonster(activeChar, Integer.parseInt(id), 
+            Integer.parseInt(x), Integer.parseInt(y), 
+            Integer.parseInt(z), h);
+    } catch (Exception e) {
+        AdminHtml.showAdminHtml(activeChar, "spawns.htm");
+    }
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="Error Handling">
+    Always validate input and handle exceptions gracefully:
+    
+    ```java
+    try {
+        int value = Integer.parseInt(param);
+    } catch (NumberFormatException e) {
+        player.sendMessage("Invalid number!");
+        return false;
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Return Values">
+    Return `true` only if the handler successfully completed:
+    - Item handlers: `true` if item was consumed/used
+    - Command handlers: `true` if command was handled
+  </Accordion>
+  
+  <Accordion title="Null Safety">
+    Check for null before accessing objects:
+    
+    ```java
+    if (player.getTarget() == null || !player.getTarget().isPlayer()) {
+        return false;
+    }
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Handler Types Reference
+
+| Package | Interface | Purpose |
+|---------|-----------|----------|
+| `itemhandlers/` | `IItemHandler` | Item usage |
+| `admincommandhandlers/` | `IAdminCommandHandler` | GM commands |
+| `voicedcommandhandlers/` | `IVoicedCommandHandler` | Player commands |
+| `effecthandlers/` | `AbstractEffect` | Skill effects |
+| `targethandlers/` | `ITargetTypeHandler` | Skill targeting |
+| `usercommandhandlers/` | `IUserCommandHandler` | User commands |
+| `chathandlers/` | `IChatHandler` | Chat commands |
+| `punishmenthandlers/` | `IPunishmentHandler` | Punishment types |
+| `bypasshandlers/` | `IBypassHandler` | HTML bypass |
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quest Scripts" icon="scroll" href="/scripting/quest-scripts">
+    Return to quest scripting guide
+  </Card>
+  <Card title="AI Scripts" icon="brain" href="/scripting/ai-scripts">
+    Return to AI scripting guide
+  </Card>
+</CardGroup>

@@ -1,0 +1,681 @@
+---
+title: 'Skill System'
+description: 'Complete API reference for skills, buffs, and ability management'
+icon: 'wand-magic-sparkles'
+---
+
+## Overview
+
+The L2J Mobius skill system manages all character abilities including active skills, passive buffs, debuffs, and special abilities. Skills are defined by templates and applied through buff effects.
+
+**Package:** `org.l2jmobius.gameserver.model.skill`
+
+## Class Hierarchy
+
+<CardGroup cols={2}>
+  <Card title="Skill" icon="wand-sparkles">
+    Core skill definition and properties
+  </Card>
+  <Card title="BuffInfo" icon="clock">
+    Active buff/debuff instance on a creature
+  </Card>
+  <Card title="SkillHolder" icon="box">
+    Lightweight skill reference (ID + level)
+  </Card>
+  <Card title="AbnormalType" icon="tags">
+    Skill effect category (buffs, debuffs)
+  </Card>
+</CardGroup>
+
+## Skill Class
+
+### Overview
+
+The `Skill` class represents a complete skill definition with all properties, effects, and targeting information.
+
+**Source:** `model/skill/Skill.java:68`
+
+### Core Properties
+
+<ParamField path="_id" type="int" required>
+  Unique skill ID
+</ParamField>
+
+<ParamField path="_level" type="int" required>
+  Skill level (1-100+)
+</ParamField>
+
+<ParamField path="_displayId" type="int">
+  Custom skill ID shown to client (defaults to ID)
+</ParamField>
+
+<ParamField path="_displayLevel" type="int">
+  Custom skill level shown to client
+</ParamField>
+
+<ParamField path="_name" type="String" required>
+  Skill name
+</ParamField>
+
+<ParamField path="_operateType" type="SkillOperateType" required>
+  Operation type: ACTIVE, PASSIVE, TOGGLE
+</ParamField>
+
+### Resource Costs
+
+<ParamField path="_mpConsume" type="int" default="0">
+  MP consumed on cast
+</ParamField>
+
+<ParamField path="_mpInitialConsume" type="int" default="0">
+  Initial MP cost (before cast starts)
+</ParamField>
+
+<ParamField path="_mpPerChanneling" type="int" default="0">
+  MP consumed per channeling tick
+</ParamField>
+
+<ParamField path="_hpConsume" type="int" default="0">
+  HP consumed on cast
+</ParamField>
+
+<ParamField path="_itemConsumeId" type="int" default="0">
+  Item ID required for casting
+</ParamField>
+
+<ParamField path="_itemConsumeCount" type="int" default="0">
+  Number of items consumed
+</ParamField>
+
+### Timing Properties
+
+<ParamField path="_hitTime" type="int">
+  Cast time in milliseconds
+</ParamField>
+
+<ParamField path="_coolTime" type="int">
+  Animation cooldown after cast (ms)
+</ParamField>
+
+<ParamField path="_reuseDelay" type="int">
+  Reuse delay in milliseconds
+</ParamField>
+
+### Range and Targeting
+
+<ParamField path="_castRange" type="int">
+  Maximum cast range
+</ParamField>
+
+<ParamField path="_effectRange" type="int">
+  Effect application range
+</ParamField>
+
+<ParamField path="_targetType" type="TargetType" required>
+  Target type: SELF, TARGET, PARTY, CLAN, AREA, etc.
+</ParamField>
+
+<ParamField path="_affectRange" type="int">
+  Area of effect radius
+</ParamField>
+
+### Power and Damage
+
+<ParamField path="_power" type="double">
+  Base skill power
+</ParamField>
+
+<ParamField path="_pvpPower" type="double">
+  Power modifier in PvP
+</ParamField>
+
+<ParamField path="_pvePower" type="double">
+  Power modifier in PvE
+</ParamField>
+
+<ParamField path="_magicLevel" type="int">
+  Magic level for resist calculations
+</ParamField>
+
+### Abnormal (Buff/Debuff) Properties
+
+<ParamField path="_abnormalType" type="AbnormalType" required>
+  Abnormal category (determines stacking)
+</ParamField>
+
+<ParamField path="_abnormalLevel" type="int">
+  Abnormal level (higher level replaces lower)
+</ParamField>
+
+<ParamField path="_abnormalTime" type="int">
+  Duration in seconds
+</ParamField>
+
+<ParamField path="_isAbnormalInstant" type="boolean" default="false">
+  Whether effect applies instantly (herbs)
+</ParamField>
+
+<ParamField path="_stayAfterDeath" type="boolean" default="false">
+  Whether buff persists after death
+</ParamField>
+
+## Key Methods
+
+### Skill Information
+
+<ResponseField name="getId" type="int">
+  Returns skill ID
+  ```java
+  int skillId = skill.getId();
+  ```
+</ResponseField>
+
+<ResponseField name="getLevel" type="int">
+  Returns skill level
+  ```java
+  int level = skill.getLevel();
+  ```
+</ResponseField>
+
+<ResponseField name="getName" type="String">
+  Returns skill name
+  ```java
+  String name = skill.getName();
+  ```
+</ResponseField>
+
+<ResponseField name="getOperateType" type="SkillOperateType">
+  Returns operation type
+  ```java
+  if (skill.getOperateType() == SkillOperateType.TOGGLE) {
+      // Handle toggle skill
+  }
+  ```
+</ResponseField>
+
+### Resource Costs
+
+<ResponseField name="getMpConsume" type="int">
+  Returns MP cost
+  ```java
+  int mpCost = skill.getMpConsume();
+  if (player.getCurrentMp() < mpCost) {
+      player.sendMessage("Not enough MP");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getHpConsume" type="int">
+  Returns HP cost
+  ```java
+  int hpCost = skill.getHpConsume();
+  ```
+</ResponseField>
+
+### Timing
+
+<ResponseField name="getHitTime" type="int">
+  Returns cast time in milliseconds
+  ```java
+  int castTime = skill.getHitTime();
+  ```
+</ResponseField>
+
+<ResponseField name="getReuseDelay" type="int">
+  Returns reuse delay
+  ```java
+  int reuse = skill.getReuseDelay();
+  player.addTimeStamp(skill, reuse);
+  ```
+</ResponseField>
+
+### Range and Targeting
+
+<ResponseField name="getCastRange" type="int">
+  Returns cast range
+  ```java
+  int range = skill.getCastRange();
+  if (!player.isInsideRadius3D(target, range)) {
+      player.sendMessage("Target too far");
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getTargetType" type="TargetType">
+  Returns target type
+  ```java
+  TargetType targetType = skill.getTargetType();
+  ```
+</ResponseField>
+
+<ResponseField name="isAOE" type="boolean">
+  Checks if skill is area of effect
+  ```java
+  if (skill.isAOE()) {
+      // Get targets in area
+  }
+  ```
+</ResponseField>
+
+### Power and Damage
+
+<ResponseField name="getPower" type="double">
+  Returns skill power (with PvP/PvE modifiers)
+  ```java
+  double power = skill.getPower(caster, target, isPvP, isPvE);
+  ```
+</ResponseField>
+
+<ResponseField name="isDamage" type="boolean">
+  Checks if skill deals damage
+  ```java
+  if (skill.isDamage()) {
+      // Apply damage calculations
+  }
+  ```
+</ResponseField>
+
+### Abnormal Properties
+
+<ResponseField name="getAbnormalType" type="AbnormalType">
+  Returns abnormal type
+  ```java
+  AbnormalType type = skill.getAbnormalType();
+  ```
+</ResponseField>
+
+<ResponseField name="getAbnormalLevel" type="int">
+  Returns abnormal level
+  ```java
+  int level = skill.getAbnormalLevel();
+  ```
+</ResponseField>
+
+<ResponseField name="getAbnormalTime" type="int">
+  Returns duration in seconds
+  ```java
+  int duration = skill.getAbnormalTime();
+  ```
+</ResponseField>
+
+<ResponseField name="isDebuff" type="boolean">
+  Checks if skill is a debuff
+  ```java
+  if (skill.isDebuff()) {
+      // Can be cleansed
+  }
+  ```
+</ResponseField>
+
+## BuffInfo Class
+
+### Overview
+
+Represents an active buff or debuff effect on a creature.
+
+**Source:** `model/skill/BuffInfo.java:43`
+
+### Properties
+
+<ParamField path="_skill" type="Skill" required>
+  The skill that created this buff
+</ParamField>
+
+<ParamField path="_effected" type="Creature" required>
+  The creature affected by this buff
+</ParamField>
+
+<ParamField path="_effector" type="Creature">
+  The creature that cast this buff
+</ParamField>
+
+<ParamField path="_abnormalTime" type="int">
+  Remaining time in seconds
+</ParamField>
+
+### Key Methods
+
+<ResponseField name="getSkill" type="Skill">
+  Returns the skill
+  ```java
+  Skill skill = buffInfo.getSkill();
+  ```
+</ResponseField>
+
+<ResponseField name="getEffected" type="Creature">
+  Returns affected creature
+  ```java
+  Creature target = buffInfo.getEffected();
+  ```
+</ResponseField>
+
+<ResponseField name="getEffector" type="Creature">
+  Returns caster
+  ```java
+  Creature caster = buffInfo.getEffector();
+  ```
+</ResponseField>
+
+<ResponseField name="getTime" type="int">
+  Returns remaining time
+  ```java
+  int remaining = buffInfo.getTime();
+  ```
+</ResponseField>
+
+<ResponseField name="resetAbnormalTime" type="void">
+  Resets buff duration
+  ```java
+  buffInfo.resetAbnormalTime(skill.getAbnormalTime());
+  ```
+</ResponseField>
+
+## SkillHolder Class
+
+### Overview
+
+Lightweight skill reference containing only ID and level.
+
+**Source:** `model/skill/holders/SkillHolder.java`
+
+### Usage
+
+<ResponseField name="getSkill" type="Skill">
+  Retrieves the actual skill object
+  ```java
+  SkillHolder holder = new SkillHolder(1234, 5);
+  Skill skill = holder.getSkill();
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Casting Skills
+
+```java
+public void castSkill(Creature caster, WorldObject target, Skill skill) {
+    // Check MP
+    if (caster.getCurrentMp() < skill.getMpConsume()) {
+        caster.sendPacket(SystemMessageId.NOT_ENOUGH_MP);
+        return;
+    }
+    
+    // Check range
+    if (!caster.isInsideRadius3D(target, skill.getCastRange())) {
+        caster.sendPacket(SystemMessageId.TARGET_IS_OUT_OF_RANGE);
+        return;
+    }
+    
+    // Check reuse
+    if (caster.isSkillDisabled(skill)) {
+        caster.sendPacket(SystemMessageId.SKILL_NOT_AVAILABLE);
+        return;
+    }
+    
+    // Cast skill
+    caster.doCast(skill);
+}
+```
+
+### Buff Management
+
+```java
+// Add buff to player
+public void applyBuff(Player player, Skill skill) {
+    // Create buff info
+    BuffInfo buffInfo = new BuffInfo(player, player, skill);
+    
+    // Check for existing buff of same type
+    BuffInfo existing = player.getEffectList()
+        .getBuffInfoByAbnormalType(skill.getAbnormalType());
+    
+    if (existing != null) {
+        // Compare levels
+        if (skill.getAbnormalLevel() > existing.getSkill().getAbnormalLevel()) {
+            // Remove old buff
+            existing.getEffected().getEffectList().remove(existing);
+        } else {
+            player.sendMessage("A better buff is already active.");
+            return;
+        }
+    }
+    
+    // Apply new buff
+    buffInfo.initializeEffects();
+}
+
+// Remove specific buff
+public void removeBuff(Creature creature, AbnormalType type) {
+    BuffInfo buff = creature.getEffectList().getBuffInfoByAbnormalType(type);
+    if (buff != null) {
+        creature.getEffectList().remove(buff);
+    }
+}
+
+// Remove all buffs
+public void removeAllBuffs(Creature creature) {
+    creature.getEffectList().stopAllEffects();
+}
+```
+
+### Skill Learning
+
+```java
+// Learn skill
+public boolean learnSkill(Player player, int skillId, int skillLevel) {
+    // Get skill
+    Skill skill = SkillData.getInstance().getSkill(skillId, skillLevel);
+    if (skill == null) {
+        return false;
+    }
+    
+    // Check requirements
+    SkillLearn learn = SkillTreeData.getInstance()
+        .getSkillLearn(player.getClassId(), skillId, skillLevel);
+    
+    if (learn == null) {
+        player.sendMessage("You cannot learn this skill.");
+        return false;
+    }
+    
+    // Check level requirement
+    if (player.getLevel() < learn.getGetLevel()) {
+        player.sendMessage("Level too low.");
+        return false;
+    }
+    
+    // Check SP cost
+    if (player.getSp() < learn.getLevelUpSp()) {
+        player.sendMessage("Not enough SP.");
+        return false;
+    }
+    
+    // Learn skill
+    player.addSkill(skill, true);
+    player.getStat().addSp(-learn.getLevelUpSp());
+    
+    return true;
+}
+```
+
+### Custom Skill Effects
+
+```java
+// Damage skill
+public void applyDamageSkill(Creature attacker, Creature target, Skill skill) {
+    // Calculate damage
+    boolean isPvP = attacker.isPlayer() && target.isPlayer();
+    boolean isPvE = !isPvP;
+    double power = skill.getPower(attacker, target, isPvP, isPvE);
+    
+    // Apply formulas
+    double damage = Formulas.calcMagicDam(attacker, target, skill, power);
+    
+    // Apply damage
+    target.reduceCurrentHp(damage, attacker, skill);
+    
+    // Apply effects
+    skill.applyEffects(attacker, target);
+}
+
+// Heal skill
+public void applyHealSkill(Creature caster, Creature target, Skill skill) {
+    // Calculate heal amount
+    double power = skill.getPower();
+    double heal = power + (caster.getPAtk() * 0.05);
+    
+    // Apply heal
+    double newHp = Math.min(target.getMaxHp(), 
+                           target.getCurrentHp() + heal);
+    target.setCurrentHp(newHp);
+    
+    // Visual effect
+    target.broadcastPacket(new MagicSkillUse(caster, target, 
+                          skill.getId(), skill.getLevel(), 0, 0));
+}
+```
+
+### Skill Reuse Management
+
+```java
+// Disable skill
+public void disableSkill(Player player, Skill skill) {
+    int reuseDelay = skill.getReuseDelay();
+    if (reuseDelay > 0) {
+        player.addTimeStamp(skill, reuseDelay);
+        player.disableSkill(skill, reuseDelay);
+    }
+}
+
+// Check if skill is disabled
+public boolean isSkillDisabled(Player player, Skill skill) {
+    return player.isSkillDisabled(skill);
+}
+
+// Get remaining reuse time
+public long getRemainingReuse(Player player, Skill skill) {
+    TimeStamp ts = player.getSkillReuseTimeStamp(skill.getReuseHashCode());
+    if (ts == null) {
+        return 0;
+    }
+    return ts.getRemaining();
+}
+
+// Reset skill reuse
+public void resetSkillReuse(Player player, Skill skill) {
+    player.removeTimeStamp(skill);
+    player.enableSkill(skill);
+}
+```
+
+### Skill Conditions
+
+```java
+// Check skill conditions
+public boolean checkConditions(Creature caster, WorldObject target, Skill skill) {
+    // Check if skill can be used
+    if (skill.getOperateType() == SkillOperateType.PASSIVE) {
+        return false;
+    }
+    
+    // Check target
+    if (target == null && skill.getTargetType() == TargetType.TARGET) {
+        caster.sendPacket(SystemMessageId.TARGET_CANT_FOUND);
+        return false;
+    }
+    
+    // Check HP cost
+    if (caster.getCurrentHp() <= skill.getHpConsume()) {
+        caster.sendPacket(SystemMessageId.NOT_ENOUGH_HP);
+        return false;
+    }
+    
+    // Check items
+    if (skill.getItemConsumeId() > 0) {
+        if (caster.isPlayer()) {
+            Player player = caster.getActingPlayer();
+            if (player.getInventory().getInventoryItemCount(
+                    skill.getItemConsumeId(), -1) < skill.getItemConsumeCount()) {
+                player.sendPacket(SystemMessageId.THERE_ARE_NOT_ENOUGH_NECESSARY_ITEMS_TO_USE_THE_SKILL);
+                return false;
+            }
+        }
+    }
+    
+    return true;
+}
+```
+
+### Toggle Skills
+
+```java
+// Toggle skill on/off
+public void toggleSkill(Player player, Skill skill) {
+    if (skill.getOperateType() != SkillOperateType.TOGGLE) {
+        return;
+    }
+    
+    // Check if already active
+    BuffInfo existing = player.getEffectList()
+        .getBuffInfoBySkillId(skill.getId());
+    
+    if (existing != null) {
+        // Deactivate
+        existing.getEffected().getEffectList().remove(existing);
+        player.sendMessage(skill.getName() + " deactivated.");
+    } else {
+        // Activate
+        if (checkConditions(player, player, skill)) {
+            skill.applyEffects(player, player);
+            player.sendMessage(skill.getName() + " activated.");
+        }
+    }
+}
+```
+
+## Skill Operation Types
+
+| Type | Description |
+|------|-------------|
+| `ACTIVE` | Cast once, applies effects |
+| `PASSIVE` | Always active, no casting |
+| `TOGGLE` | On/off state with continuous MP drain |
+
+## Common Abnormal Types
+
+| Type | Description |
+|------|-------------|
+| `BUFF` | Generic beneficial effect |
+| `DEBUFF` | Generic negative effect |
+| `HP_RECOVER` | HP regeneration |
+| `MP_RECOVER` | MP regeneration |
+| `SPEED_UP` | Movement speed increase |
+| `SLOW` | Movement speed decrease |
+| `STUN` | Cannot move or act |
+| `ROOT` | Cannot move |
+| `POISON` | Damage over time |
+
+## Related Classes
+
+<CardGroup cols={2}>
+  <Card title="SkillData" icon="database">
+    Skill data manager and loader
+  </Card>
+  <Card title="SkillTreeData" icon="diagram-project">
+    Manages skill learning requirements
+  </Card>
+  <Card title="EffectList" icon="list">
+    Manages active buffs on a creature
+  </Card>
+  <Card title="Formulas" icon="calculator">
+    Damage and effect calculations
+  </Card>
+</CardGroup>
+
+## Notes
+
+- Skills with same AbnormalType don't stack (highest level wins)
+- Toggle skills require continuous MP consumption
+- Passive skills are always active and cannot be cast
+- Debuffs can be cleansed unless flagged as unremovable
+- Skill reuse is shared by hash code for skill groups

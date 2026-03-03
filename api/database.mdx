@@ -1,0 +1,601 @@
+---
+title: 'Database Layer'
+description: 'Database connection pooling and management using HikariCP for L2J Mobius Chronicle 4'
+icon: 'database'
+---
+
+## Overview
+
+The database layer provides high-performance connection pooling using HikariCP, optimized for high-load environments with 2000-3000 concurrent players. It manages all database connections for the game server.
+
+## DatabaseFactory
+
+Singleton factory class that manages the HikariCP connection pool for database access.
+
+**Package**: `org.l2jmobius.commons.database`
+
+**Location**: `DatabaseFactory.java:42`
+
+### Class Signature
+
+```java
+public class DatabaseFactory
+```
+
+<Note>
+  DatabaseFactory uses a singleton pattern. The constructor is private and all access is through static methods.
+</Note>
+
+### Static Methods
+
+#### init()
+
+```java
+public static synchronized void init()
+```
+
+Initializes the HikariCP connection pool with optimized settings. Must be called once during server startup.
+
+**Location**: `DatabaseFactory.java:54`
+
+**Initialization checks**:
+- Prevents reinitialization if pool already exists
+- Loads database configuration from `DatabaseConfig`
+- Creates and configures HikariCP data source
+- Tests database connectivity
+
+**Thread Safety**: Synchronized to prevent concurrent initialization
+
+#### getConnection()
+
+```java
+public static Connection getConnection()
+```
+
+Retrieves a database connection from the pool.
+
+<ResponseField name="returns" type="java.sql.Connection">
+  A valid database connection from the pool
+</ResponseField>
+
+**Throws**: `RuntimeException` - if unable to obtain a connection
+
+**Location**: `DatabaseFactory.java:221`
+
+**Usage**:
+```java
+try (Connection con = DatabaseFactory.getConnection();
+     PreparedStatement ps = con.prepareStatement("SELECT * FROM characters WHERE charId=?"))
+{
+    ps.setInt(1, objectId);
+    try (ResultSet rs = ps.executeQuery())
+    {
+        // Process results
+    }
+}
+catch (SQLException e)
+{
+    LOGGER.log(Level.SEVERE, "Database error", e);
+}
+```
+
+<Warning>
+  Always use try-with-resources to ensure connections are properly returned to the pool. Failing to close connections will exhaust the pool.
+</Warning>
+
+#### close()
+
+```java
+public static synchronized void close()
+```
+
+Closes the HikariCP connection pool gracefully during server shutdown.
+
+**Location**: `DatabaseFactory.java:233`
+
+**Thread Safety**: Synchronized to prevent concurrent shutdown
+
+---
+
+## Pool Configuration
+
+The DatabaseFactory configures HikariCP with optimized settings for game server workloads.
+
+### Core Pool Settings
+
+```java
+final HikariConfig config = new HikariConfig();
+config.setDriverClassName(DatabaseConfig.DATABASE_DRIVER);
+config.setJdbcUrl(DatabaseConfig.DATABASE_URL);
+config.setUsername(DatabaseConfig.DATABASE_LOGIN);
+config.setPassword(DatabaseConfig.DATABASE_PASSWORD);
+```
+
+<ParamField path="DATABASE_DRIVER" type="String">
+  JDBC driver class name (typically `com.mysql.jdbc.Driver`)
+</ParamField>
+
+<ParamField path="DATABASE_URL" type="String">
+  JDBC connection URL (e.g., `jdbc:mysql://localhost:3306/l2jmobius`)
+</ParamField>
+
+<ParamField path="DATABASE_LOGIN" type="String">
+  Database username for authentication
+</ParamField>
+
+<ParamField path="DATABASE_PASSWORD" type="String">
+  Database password for authentication
+</ParamField>
+
+### Pool Size Configuration
+
+```java
+config.setMaximumPoolSize(determineMaxPoolSize(DatabaseConfig.DATABASE_MAX_CONNECTIONS)); // 100
+config.setMinimumIdle(determineMinimumIdle(DatabaseConfig.DATABASE_MAX_CONNECTIONS)); // e.g., 20
+```
+
+<ParamField path="maximumPoolSize" type="int" default="100">
+  Maximum number of connections in the pool (configurable, min: 4, max: 1000)
+</ParamField>
+
+<ParamField path="minimumIdle" type="int" default="20">
+  Minimum number of idle connections maintained (calculated as 10% of max pool size)
+</ParamField>
+
+#### determineMaxPoolSize()
+
+```java
+private static int determineMaxPoolSize(int configuredMax)
+{
+    return Math.min(Math.max(configuredMax, 4), 1000);
+}
+```
+
+Ensures the pool size is between 4 and 1000 connections.
+
+**Location**: `DatabaseFactory.java:124`
+
+#### determineMinimumIdle()
+
+```java
+private static int determineMinimumIdle(int configuredMax)
+{
+    return Math.max(determineMaxPoolSize(configuredMax) / 10, 2);
+}
+```
+
+Calculates minimum idle connections as 10% of max pool size (minimum 2).
+
+**Location**: `DatabaseFactory.java:134`
+
+### Timeout Settings
+
+```java
+config.setConnectionTimeout(30000);  // 30 seconds
+config.setIdleTimeout(180000);       // 3 minutes
+config.setMaxLifetime(900000);       // 15 minutes
+```
+
+<ParamField path="connectionTimeout" type="long" default="30000">
+  Maximum time in milliseconds to wait for a connection from the pool
+</ParamField>
+
+<ParamField path="idleTimeout" type="long" default="180000">
+  Maximum time in milliseconds a connection can remain idle before being removed from the pool
+</ParamField>
+
+<ParamField path="maxLifetime" type="long" default="900000">
+  Maximum lifetime of a connection in milliseconds before being retired
+</ParamField>
+
+### Leak Detection
+
+```java
+config.setLeakDetectionThreshold(30000);  // 30 seconds
+```
+
+<ParamField path="leakDetectionThreshold" type="long" default="30000">
+  Time in milliseconds before logging a connection leak warning (0 = disabled)
+</ParamField>
+
+HikariCP will log a warning if a connection is held for longer than this threshold, indicating a potential leak where the connection wasn't properly closed.
+
+### Pool Identity & Monitoring
+
+```java
+config.setPoolName("L2JMobiusPool");
+config.setRegisterMbeans(true);
+```
+
+<ParamField path="poolName" type="String" default="L2JMobiusPool">
+  Identifier for this connection pool in logs and monitoring tools
+</ParamField>
+
+<ParamField path="registerMbeans" type="boolean" default="true">
+  Whether to register JMX MBeans for monitoring via JConsole or similar tools
+</ParamField>
+
+### Advanced Optimizations
+
+```java
+config.setInitializationFailTimeout(-1);
+config.setValidationTimeout(5000);
+
+// MySQL-specific optimizations
+config.addDataSourceProperty("cachePrepStmts", "true");
+config.addDataSourceProperty("prepStmtCacheSize", "250");
+config.addDataSourceProperty("prepStmtCacheSqlLimit", "2048");
+config.addDataSourceProperty("useServerPrepStmts", "true");
+config.addDataSourceProperty("useLocalSessionState", "true");
+config.addDataSourceProperty("rewriteBatchedStatements", "true");
+config.addDataSourceProperty("cacheResultSetMetadata", "true");
+config.addDataSourceProperty("cacheServerConfiguration", "true");
+config.addDataSourceProperty("elideSetAutoCommits", "true");
+config.addDataSourceProperty("maintainTimeStats", "false");
+```
+
+<ParamField path="initializationFailTimeout" type="long" default="-1">
+  Time to wait during pool initialization before failing (-1 = wait indefinitely)
+</ParamField>
+
+<ParamField path="validationTimeout" type="long" default="5000">
+  Maximum time in milliseconds to validate a connection is alive
+</ParamField>
+
+#### MySQL Driver Optimizations
+
+| Property | Value | Purpose |
+|----------|-------|----------|
+| `cachePrepStmts` | true | Enable prepared statement caching |
+| `prepStmtCacheSize` | 250 | Number of prepared statements to cache per connection |
+| `prepStmtCacheSqlLimit` | 2048 | Maximum SQL length to cache |
+| `useServerPrepStmts` | true | Use server-side prepared statements |
+| `rewriteBatchedStatements` | true | Optimize batch inserts/updates |
+| `cacheResultSetMetadata` | true | Cache result set metadata |
+| `cacheServerConfiguration` | true | Cache server configuration |
+| `elideSetAutoCommits` | true | Skip redundant setAutoCommit calls |
+
+---
+
+## Connection Testing
+
+DatabaseFactory provides two modes for testing database connectivity during initialization.
+
+### Test Single Connection
+
+```java
+private static void testSingleConnection()
+{
+    try (Connection connection = DATABASE_POOL.getConnection())
+    {
+        if (connection.isValid(5))
+        {
+            LOGGER.info("Database: Initialized with a valid connection.");
+        }
+        else
+        {
+            LOGGER.warning("Database: Connection is not valid.");
+        }
+    }
+    catch (SQLException e)
+    {
+        LOGGER.log(Level.SEVERE, "Database: Problem initializing connection pool.", e);
+    }
+}
+```
+
+**Location**: `DatabaseFactory.java:204`
+
+Quick validation that the pool can establish at least one connection.
+
+### Test All Connections
+
+```java
+private static void testDatabaseConnections()
+{
+    int successfulConnections = 0;
+    
+    for (int i = 0; i < DATABASE_POOL.getMaximumPoolSize(); i++)
+    {
+        try (Connection connection = DATABASE_POOL.getConnection())
+        {
+            if (connection.isValid(5))
+            {
+                successfulConnections++;
+            }
+        }
+        catch (SQLException e)
+        {
+            LOGGER.log(Level.SEVERE, "Database: Failed to open connection " + (i + 1) + "!", e);
+            break;
+        }
+    }
+    
+    if (successfulConnections == DATABASE_POOL.getMaximumPoolSize())
+    {
+        LOGGER.info("Database: Initialized with a total of " + successfulConnections + " connections.");
+    }
+    else
+    {
+        LOGGER.warning("Database: Only " + successfulConnections + " out of " 
+            + DATABASE_POOL.getMaximumPoolSize() + " connections were successful.");
+        adjustPoolSize(successfulConnections);
+    }
+}
+```
+
+**Location**: `DatabaseFactory.java:145`
+
+Attempts to open all configured connections to verify the database can handle the load.
+
+<Note>
+  Connection testing is controlled by `DatabaseConfig.DATABASE_TEST_CONNECTIONS`. In production, single connection testing is usually sufficient.
+</Note>
+
+### Pool Size Adjustment
+
+If full connection testing fails, the pool size is automatically adjusted:
+
+```java
+private static void adjustPoolSize(int successfulConnections)
+{
+    int newConnectionCount = successfulConnections;
+    
+    if (successfulConnections > 100)
+    {
+        newConnectionCount = (successfulConnections / 100) * 100;
+    }
+    else if (successfulConnections > 50)
+    {
+        newConnectionCount = (successfulConnections / 50) * 50;
+    }
+    
+    // Ensure minimum pool size of 20
+    newConnectionCount = Math.max(newConnectionCount, 20);
+    
+    DATABASE_POOL.setMaximumPoolSize(newConnectionCount);
+    DATABASE_POOL.setMinimumIdle(determineMinimumIdle(newConnectionCount));
+    LOGGER.info("Database: Reinitialized pool size to " + newConnectionCount + ".");
+}
+```
+
+**Location**: `DatabaseFactory.java:176`
+
+---
+
+## Usage Examples
+
+### Initialization
+
+```java
+// In GameServer.java during startup
+printSection("Database");
+DatabaseFactory.init();
+```
+
+### Simple Query
+
+```java
+try (Connection con = DatabaseFactory.getConnection();
+     PreparedStatement ps = con.prepareStatement("SELECT name, level FROM characters WHERE charId=?"))
+{
+    ps.setInt(1, characterId);
+    
+    try (ResultSet rs = ps.executeQuery())
+    {
+        if (rs.next())
+        {
+            String name = rs.getString("name");
+            int level = rs.getInt("level");
+            LOGGER.info("Character: " + name + " (Level " + level + ")");
+        }
+    }
+}
+catch (SQLException e)
+{
+    LOGGER.log(Level.SEVERE, "Error loading character", e);
+}
+```
+
+### Insert/Update with Transaction
+
+```java
+try (Connection con = DatabaseFactory.getConnection())
+{
+    con.setAutoCommit(false);
+    
+    try (PreparedStatement ps1 = con.prepareStatement("UPDATE characters SET level=? WHERE charId=?");
+         PreparedStatement ps2 = con.prepareStatement("INSERT INTO character_log (charId, action) VALUES (?, ?)"))
+    {
+        // Update character level
+        ps1.setInt(1, newLevel);
+        ps1.setInt(2, characterId);
+        ps1.executeUpdate();
+        
+        // Log the change
+        ps2.setInt(1, characterId);
+        ps2.setString(2, "Level up to " + newLevel);
+        ps2.executeUpdate();
+        
+        con.commit();
+    }
+    catch (SQLException e)
+    {
+        con.rollback();
+        throw e;
+    }
+}
+catch (SQLException e)
+{
+    LOGGER.log(Level.SEVERE, "Error updating character", e);
+}
+```
+
+### Batch Operations
+
+```java
+try (Connection con = DatabaseFactory.getConnection();
+     PreparedStatement ps = con.prepareStatement("INSERT INTO items (owner_id, item_id, count) VALUES (?, ?, ?)"))
+{
+    for (ItemInstance item : items)
+    {
+        ps.setInt(1, ownerId);
+        ps.setInt(2, item.getId());
+        ps.setInt(3, item.getCount());
+        ps.addBatch();
+    }
+    
+    ps.executeBatch();
+}
+catch (SQLException e)
+{
+    LOGGER.log(Level.SEVERE, "Error saving items", e);
+}
+```
+
+<Note>
+  The `rewriteBatchedStatements=true` optimization allows the MySQL driver to rewrite batch operations into multi-value inserts for better performance.
+</Note>
+
+---
+
+## Performance Monitoring
+
+### JMX Monitoring
+
+With `registerMbeans=true`, you can monitor the pool via JConsole:
+
+1. Connect to the JVM process
+2. Navigate to MBeans tab
+3. Look for `com.zaxxer.hikari:type=Pool (L2JMobiusPool)`
+
+**Available metrics**:
+- Active connections
+- Idle connections
+- Total connections
+- Threads awaiting connections
+- Connection acquisition time
+
+### Log Messages
+
+**Successful initialization**:
+```
+Database: HikariCP pool initialized successfully.
+Database: Initialized with a valid connection.
+```
+
+**Leak detection warning**:
+```
+Connection leak detection triggered for connection <hash>, stack trace follows...
+```
+
+---
+
+## Configuration Reference
+
+Key configuration properties in `DatabaseConfig`:
+
+<ParamField path="DATABASE_DRIVER" type="String" default="com.mysql.jdbc.Driver">
+  JDBC driver class name
+</ParamField>
+
+<ParamField path="DATABASE_URL" type="String" default="jdbc:mysql://localhost:3306/l2jmobius">
+  Database connection URL
+</ParamField>
+
+<ParamField path="DATABASE_LOGIN" type="String" required>
+  Database username
+</ParamField>
+
+<ParamField path="DATABASE_PASSWORD" type="String" required>
+  Database password
+</ParamField>
+
+<ParamField path="DATABASE_MAX_CONNECTIONS" type="int" default="100">
+  Maximum pool size (will be clamped between 4-1000)
+</ParamField>
+
+<ParamField path="DATABASE_TEST_CONNECTIONS" type="boolean" default="false">
+  Whether to test all connections during initialization
+</ParamField>
+
+---
+
+## Best Practices
+
+<Card title="Always Use Try-With-Resources" icon="circle-check">
+  Always acquire connections in try-with-resources blocks to ensure they are returned to the pool:
+  ```java
+  try (Connection con = DatabaseFactory.getConnection()) {
+      // Use connection
+  }
+  ```
+</Card>
+
+<Card title="Use Prepared Statements" icon="shield">
+  Always use PreparedStatement to prevent SQL injection and benefit from caching:
+  ```java
+  try (PreparedStatement ps = con.prepareStatement("SELECT * FROM table WHERE id=?")) {
+      ps.setInt(1, id);
+  }
+  ```
+</Card>
+
+<Card title="Close Resources in Order" icon="layer-group">
+  Close ResultSet, Statement, then Connection (or use nested try-with-resources):
+  ```java
+  try (Connection con = DatabaseFactory.getConnection();
+       PreparedStatement ps = con.prepareStatement(sql);
+       ResultSet rs = ps.executeQuery()) {
+      // Process results
+  }
+  ```
+</Card>
+
+<Card title="Monitor Connection Leaks" icon="magnifying-glass">
+  If you see leak detection warnings in logs, audit your code for unclosed connections.
+</Card>
+
+---
+
+## Troubleshooting
+
+### Pool Exhaustion
+
+**Symptom**: `SQLException: Connection is not available, request timed out after 30000ms`
+
+**Causes**:
+- Connection leaks (not closing connections)
+- Pool size too small for load
+- Long-running queries holding connections
+
+**Solutions**:
+1. Review code for unclosed connections
+2. Check leak detection logs
+3. Increase `DATABASE_MAX_CONNECTIONS`
+4. Optimize slow queries
+
+### Connection Timeout
+
+**Symptom**: `Communications link failure` or `The last packet successfully received from the server`
+
+**Causes**:
+- Database server unreachable
+- Network issues
+- Firewall blocking connections
+- MySQL `wait_timeout` too low
+
+**Solutions**:
+1. Verify database server is running
+2. Check network connectivity
+3. Increase MySQL `wait_timeout` variable
+4. Adjust `maxLifetime` to be less than MySQL `wait_timeout`
+
+---
+
+## Related Components
+
+- [GameServer](/api/game-server) - Initializes DatabaseFactory during startup
+- [GameClient](/api/network#gameclient) - Uses database connections for character operations
+- `DatabaseConfig` - Configuration properties for database connections
+- `HikariCP` - Underlying connection pool implementation

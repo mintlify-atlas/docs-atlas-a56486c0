@@ -1,0 +1,324 @@
+---
+title: 'Seven Signs'
+description: 'Weekly event system with Dawn vs. Dusk cabal competition for seal control'
+icon: 'circle-half-stroke'
+---
+
+## Overview
+
+The Seven Signs is a recurring server-wide event system where players join either the **Dawn** or **Dusk** cabal to compete for control of three sacred seals. The winning cabal gains special bonuses and access to exclusive NPCs and areas.
+
+<Note>
+  Seven Signs operates on a weekly cycle with distinct competition and validation periods, affecting the entire game world's economy and PvE content.
+</Note>
+
+## Cabals
+
+### Dawn Cabal
+- Representative: **Anakim** (NPC ID: 25286)
+- Philosophy: Light and order
+- Bonus: Access to Mammon services when holding seals
+
+### Dusk Cabal
+- Representative: **Lilith** (NPC ID: 25283)
+- Philosophy: Darkness and chaos
+- Bonus: Access to Mammon services when holding seals
+
+**Source**: `SevenSigns.java:60-96`
+
+## The Three Seals
+
+### Seal of Avarice
+- **Effect**: Controls Mammon Merchant access
+- **Bonus**: Winning cabal can trade with Mammon Merchant (NPC 31113)
+- **Strategy**: Economic advantage through exclusive item trading
+
+### Seal of Gnosis
+- **Effect**: Controls Mammon Blacksmith access
+- **Bonus**: Access to Mammon Blacksmith (NPC 31126) for special crafting
+- **NPC Spawns**: Enables Orators (31094) and Preachers (31093)
+
+### Seal of Strife
+- **Effect**: Castle siege benefits
+- **Bonus**: Enhanced siege capabilities for winning cabal
+
+**Implementation**: `SevenSigns.java:64-67`
+
+## Competition Mechanics
+
+### Period Cycle
+
+The Seven Signs system operates on a 2-week cycle:
+
+| Period | Duration | Purpose |
+|--------|----------|----------|
+| **Recruitment** | 15 minutes | Players can join/switch cabals |
+| **Competition** | ~7 days | Active contribution period |
+| **Results** | 15 minutes | Score calculation |
+| **Seal Validation** | ~7 days | Winners enjoy seal bonuses |
+
+**Constants**:
+```java
+public static final int PERIOD_COMP_RECRUITING = 0;
+public static final int PERIOD_COMPETITION = 1;
+public static final int PERIOD_COMP_RESULTS = 2;
+public static final int PERIOD_SEAL_VALIDATION = 3;
+
+public static final int PERIOD_MINOR_LENGTH = 900000;      // 15 min
+public static final int PERIOD_MAJOR_LENGTH = 604800000 - PERIOD_MINOR_LENGTH;
+```
+
+**Source**: `SevenSigns.java:69-81`
+
+### Seal Stones
+
+Players contribute by collecting and submitting **Seal Stones**:
+
+| Seal Stone | Item ID | Point Value | Contribution |
+|------------|---------|-------------|-------------|
+| Blue Seal Stone | 6360 | 3 | 3 points |
+| Green Seal Stone | 6361 | 5 | 5 points |
+| Red Seal Stone | 6362 | 10 | 10 points |
+
+**Mechanics**:
+- Obtained from hunting monsters during competition period
+- Turned in to cabal NPCs for contribution points
+- Individual contribution affects personal rewards
+- Total contribution determines cabal score
+
+**Source**: `SevenSigns.java:98-115`
+
+### Festival System
+
+In addition to seal stones, cabals compete in **Seven Signs Festivals**:
+- Timed dungeon challenges
+- Party-based PvE content
+- Contribution to cabal's festival score
+- Blood shards and Ancient Adena rewards
+
+<Warning>
+  Festival scores are tracked separately from seal stone scores but both contribute to determining the winning cabal.
+</Warning>
+
+## Scoring System
+
+### Total Score Calculation
+
+```
+CabalTotalScore = StoneScore + FestivalScore
+```
+
+### Winner Determination
+
+```java
+protected int getCabalHighestScore() {
+    double dawnTotal = _dawnStoneScore + _dawnFestivalScore;
+    double duskTotal = _duskStoneScore + _duskFestivalScore;
+    
+    if (dawnTotal > duskTotal)
+        return CABAL_DAWN;
+    else if (duskTotal > dawnTotal)
+        return CABAL_DUSK;
+    else
+        return CABAL_NULL;  // Tie - no winner
+}
+```
+
+### Seal Assignment
+
+- Each seal goes to the cabal with highest contribution for that specific seal
+- Possible for seals to be split between cabals
+- Ties result in no cabal controlling the seal
+
+## NPC Spawning
+
+### Dynamic Spawns
+
+During **Seal Validation Period**, special NPCs spawn based on seal ownership:
+
+```java
+if (isSealValidationPeriod() || isCompResultsPeriod()) {
+    // Mammon Marketeer always spawns
+    for (AutoSpawnInstance spawnInst : marketeerSpawns) {
+        AutoSpawnHandler.getInstance().setSpawnActive(spawnInst, true);
+    }
+    
+    // Gnosis seal holder gets Blacksmith
+    if (getSealOwner(SEAL_GNOSIS) == getCabalHighestScore()) {
+        AutoSpawnHandler.getInstance().setSpawnActive(blacksmithSpawn, true);
+        // Spawn Orators and Preachers
+    }
+    
+    // Avarice seal holder gets Merchant
+    if (getSealOwner(SEAL_AVARICE) == getCabalHighestScore()) {
+        AutoSpawnHandler.getInstance().setSpawnActive(merchantSpawn, true);
+    }
+}
+```
+
+**Source**: `SevenSigns.java:241-300`
+
+## Rewards
+
+### Personal Rewards
+
+Based on contribution ranking within winning cabal:
+
+<AccordionGroup>
+  <Accordion title="Top 1% Contributors" icon="crown">
+    - Ancient Adena rewards
+    - Special items from Mammon
+    - Enhanced festival participation bonuses
+  </Accordion>
+
+  <Accordion title="Top 10% Contributors" icon="medal">
+    - Moderate Ancient Adena rewards
+    - Access to Mammon services
+  </Accordion>
+
+  <Accordion title="Top 25% Contributors" icon="star">
+    - Basic Ancient Adena rewards
+  </Accordion>
+
+  <Accordion title="Top 50% Contributors" icon="user">
+    - Minimal Ancient Adena rewards
+  </Accordion>
+</AccordionGroup>
+
+### Cabal Bonuses
+
+**Seal of Avarice**:
+- Exclusive trading with Mammon Merchant
+- Special items and consumables
+
+**Seal of Gnosis**:
+- Mammon Blacksmith services
+- Enchant scrolls and upgrade materials
+- Orator/Preacher buffs and services
+
+**Seal of Strife**:
+- Castle siege advantages
+- Enhanced spawn rates in specific areas
+
+## Database Schema
+
+### seven_signs table
+
+```sql
+CREATE TABLE seven_signs (
+    charId INT,
+    cabal INT,              -- 0=None, 1=Dusk, 2=Dawn
+    seal INT,               -- Which seal they support
+    red_stones INT,
+    green_stones INT,
+    blue_stones INT,
+    ancient_adena_amount INT,
+    contribution_score INT,
+    PRIMARY KEY (charId)
+);
+```
+
+### seven_signs_status table
+
+Stores current period state:
+- `current_cycle`: Competition cycle number
+- `active_period`: Current period (0-3)
+- `previous_winner`: Last winning cabal
+- Stone scores for each cabal
+- Festival scores for each cabal
+- Seal ownership data
+
+## Configuration
+
+### Period Timing
+
+```java
+public static final int PERIOD_START_HOUR = 18;  // 6 PM
+public static final int PERIOD_START_MINS = 00;
+public static final int PERIOD_START_DAY = Calendar.MONDAY;
+```
+
+### Item Costs
+
+```java
+public static final int RECORD_SEVEN_SIGNS_ID = 5707;
+public static final int RECORD_SEVEN_SIGNS_COST = 500;
+```
+
+## Strategy Tips
+
+<AccordionGroup>
+  <Accordion title="Solo Players" icon="user">
+    Focus on collecting high-value Red Seal Stones (10 points each) from appropriate level monsters. Participate in festivals when your cabal has enough members.
+  </Accordion>
+
+  <Accordion title="Party Players" icon="users">
+    Coordinate festival participation for maximum cabal score contribution. Split between stone farming and festival runs.
+  </Accordion>
+
+  <Accordion title="Economy Players" icon="coins">
+    If your cabal controls Avarice/Gnosis seals during validation, stockpile Ancient Adena for exclusive Mammon trades.
+  </Accordion>
+
+  <Accordion title="Siege Clans" icon="castle">
+    Prioritize Seal of Strife contribution if your clan actively participates in castle sieges.
+  </Accordion>
+</AccordionGroup>
+
+## Period Transitions
+
+### Automatic Period Changes
+
+The system automatically transitions periods:
+
+```java
+private class SevenSignsPeriodChange implements Runnable {
+    @Override
+    public void run() {
+        // Calculate winners
+        // Update seal ownership
+        // Spawn/despawn NPCs
+        // Distribute rewards
+        // Reset scores for new cycle
+    }
+}
+```
+
+Scheduled via:
+```java
+ThreadPool.schedule(new SevenSignsPeriodChange(), milliToChange);
+```
+
+**Source**: `SevenSigns.java:190-192`
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can I switch cabals mid-competition?" icon="arrow-right-arrow-left">
+    No, you can only join or switch cabals during the Recruitment period (15 minutes at cycle start).
+  </Accordion>
+
+  <Accordion title="What happens to my seal stones if my cabal loses?" icon="box">
+    Seal stones are consumed when submitted. Your contribution score is saved for reward calculation regardless of cabal victory.
+  </Accordion>
+
+  <Accordion title="How are ties resolved?" icon="equals">
+    In case of a tie, no cabal wins and all seals remain uncontrolled until the next competition.
+  </Accordion>
+
+  <Accordion title="Can I participate in both Olympiad and Seven Signs?" icon="list-check">
+    Yes, they are independent systems. However, manage your time as both require regular participation.
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Castle Siege](/systems/castle-siege) - Seal of Strife affects sieges
+- [Raid Bosses](/systems/raid-bosses) - Lilith and Anakim as raid encounters
+- [Clan System](/systems/clan-system) - Coordinate cabal participation
+
+## References
+
+- `SevenSigns.java` - Core event system
+- `SevenSignsFestival.java` - Festival mechanics
+- Database tables: `seven_signs`, `seven_signs_status`

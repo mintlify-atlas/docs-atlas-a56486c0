@@ -1,0 +1,659 @@
+---
+title: 'Network Layer'
+description: 'Network connection management, client handling, and packet processing for L2J Mobius Chronicle 4'
+icon: 'network-wired'
+---
+
+## Overview
+
+The network layer handles all client connections, packet processing, and network I/O for the game server. It uses asynchronous NIO for high-performance connection management.
+
+## ConnectionManager
+
+Manages network connections for game clients using asynchronous socket channels.
+
+**Package**: `org.l2jmobius.commons.network`
+
+**Location**: `ConnectionManager.java:48`
+
+### Class Signature
+
+```java
+public class ConnectionManager<T extends Client<Connection<T>>>
+```
+
+<ParamField path="T" type="type parameter">
+  The client type associated with this connection manager
+</ParamField>
+
+### Constructor
+
+```java
+public ConnectionManager(
+    InetSocketAddress address, 
+    Function<Connection<T>, T> clientFactory,
+    PacketHandler<T> packetHandler
+) throws IOException
+```
+
+Initializes the connection manager with the specified configuration.
+
+<ParamField path="address" type="InetSocketAddress" required>
+  The network address and port to bind the server socket
+</ParamField>
+
+<ParamField path="clientFactory" type="Function<Connection<T>, T>" required>
+  Factory function to create client instances (typically `GameClient::new`)
+</ParamField>
+
+<ParamField path="packetHandler" type="PacketHandler<T>" required>
+  The handler for processing incoming packets
+</ParamField>
+
+**Throws**: `IOException` - if an I/O error occurs when opening the socket channel
+
+### Implementation Details
+
+The ConnectionManager uses:
+
+- **AsynchronousChannelGroup** - Custom thread pool for async I/O operations
+- **AsynchronousServerSocketChannel** - Non-blocking server socket
+- **IP Protection** - Connection rate limiting per IP address
+- **TCP Configuration** - Configurable Nagle's algorithm support
+
+#### Thread Pool Configuration
+
+```java
+_group = AsynchronousChannelGroup.withCachedThreadPool(
+    new ThreadPoolExecutor(
+        _config.threadPoolSize, 
+        Integer.MAX_VALUE, 
+        1, TimeUnit.MINUTES,
+        new SynchronousQueue<>(), 
+        new MMOThreadFactory("Server", _config.threadPriority)
+    ),
+    0
+);
+```
+
+#### Socket Configuration
+
+```java
+_socketChannel = _group.provider().openAsynchronousServerSocketChannel(_group);
+_socketChannel.setOption(StandardSocketOptions.SO_REUSEADDR, true);
+_socketChannel.bind(_config.address);
+```
+
+### Methods
+
+#### shutdown()
+
+```java
+public void shutdown()
+```
+
+Shuts down the connection manager gracefully, closing all connections and releasing resources.
+
+**Shutdown sequence**:
+1. Closes the server socket channel
+2. Initiates thread pool shutdown
+3. Waits for shutdown completion (configured timeout)
+4. Forces immediate shutdown if timeout exceeded
+
+#### getIpProtector()
+
+```java
+public IPProtector getIpProtector()
+```
+
+<ResponseField name="returns" type="IPProtector">
+  The IP protection instance managing connection rate limits
+</ResponseField>
+
+### Connection Acceptance Flow
+
+When a client connects:
+
+<Steps>
+  <Step title="Accept Connection">
+    Server socket accepts the incoming connection asynchronously
+  </Step>
+  
+  <Step title="Configure Socket">
+    Sets TCP_NODELAY option based on Nagle's algorithm configuration
+    ```java
+    channel.setOption(StandardSocketOptions.TCP_NODELAY, !_config.useNagle);
+    ```
+  </Step>
+  
+  <Step title="IP Protection Check">
+    Validates that the connecting IP hasn't exceeded connection limits
+    ```java
+    final String ip = remoteAddress.getAddress().getHostAddress();
+    if (!_ipProtector.canConnect(ip))
+    {
+        channel.close();
+        return;
+    }
+    ```
+  </Step>
+  
+  <Step title="Create Connection">
+    Creates a Connection object wrapping the socket channel
+  </Step>
+  
+  <Step title="Create Client">
+    Uses the factory to create a GameClient instance
+    ```java
+    final T client = _clientFactory.apply(connection);
+    ```
+  </Step>
+  
+  <Step title="Start Reading">
+    Notifies client of connection and begins reading packets
+    ```java
+    client.onConnected();
+    client.read();
+    ```
+  </Step>
+</Steps>
+
+### Usage Example
+
+```java
+// In GameServer.java:426
+new ConnectionManager<>(
+    new InetSocketAddress(ServerConfig.PORT_GAME), 
+    GameClient::new, 
+    new GamePacketHandler()
+);
+```
+
+---
+
+## GameClient
+
+Represents a client connected to the game server, managing the connection state, encryption, and associated player.
+
+**Package**: `org.l2jmobius.gameserver.network`
+
+**Location**: `GameClient.java:52`
+
+### Class Signature
+
+```java
+public class GameClient extends Client<org.l2jmobius.commons.network.Connection<GameClient>>
+```
+
+### Constructor
+
+```java
+public GameClient(org.l2jmobius.commons.network.Connection<GameClient> connection)
+```
+
+<ParamField path="connection" type="Connection<GameClient>" required>
+  The underlying network connection
+</ParamField>
+
+### Key Fields
+
+```java
+private ConnectionState _connectionState = ConnectionState.CONNECTED;
+private Encryption _encryption = null;
+private String _ip = "N/A";
+private String _accountName;
+private SessionKey _sessionKey;
+private Player _player;
+private ClientHardwareInfoHolder _hardwareInfo;
+private final FloodProtectors _floodProtectors = new FloodProtectors(this);
+private final ReentrantLock _playerLock = new ReentrantLock();
+```
+
+### Connection States
+
+Clients progress through these states:
+
+1. **CONNECTED** - Socket connected, awaiting protocol version
+2. **AUTHENTICATED** - Session validated with login server
+3. **ENTERING** - Character selected, loading into world
+4. **IN_GAME** - Fully loaded and playing
+5. **DISCONNECTED** - Connection closed
+
+### Core Methods
+
+#### Lifecycle Methods
+
+##### onConnected()
+
+```java
+@Override
+public void onConnected()
+```
+
+Called when the network connection is established. Logs the connection.
+
+##### onDisconnection()
+
+```java
+@Override
+public void onDisconnection()
+```
+
+Called when the connection is closed. Handles cleanup:
+- Notifies login server of logout
+- Triggers disconnection handlers
+- Updates connection state
+
+#### Encryption Methods
+
+##### enableCrypt()
+
+```java
+public byte[] enableCrypt()
+```
+
+Enables packet encryption and returns the encryption key.
+
+<ResponseField name="returns" type="byte[]">
+  The 8-byte encryption key used for packet encryption
+</ResponseField>
+
+**Encryption Key**:
+```java
+private static final byte[] CRYPT_KEY =
+{
+    (byte) 0x94, (byte) 0x35, (byte) 0x00, (byte) 0x00,
+    (byte) 0xa1, (byte) 0x6c, (byte) 0x54, (byte) 0x87
+};
+```
+
+##### encrypt() / decrypt()
+
+```java
+@Override
+public boolean encrypt(Buffer data, int offset, int size)
+
+@Override
+public boolean decrypt(Buffer data, int offset, int size)
+```
+
+Encrypt/decrypt packet data using the Blowfish-based encryption.
+
+<ParamField path="data" type="Buffer" required>
+  The buffer containing packet data
+</ParamField>
+
+<ParamField path="offset" type="int" required>
+  Starting offset in the buffer
+</ParamField>
+
+<ParamField path="size" type="int" required>
+  Number of bytes to encrypt/decrypt
+</ParamField>
+
+#### Packet Methods
+
+##### sendPacket()
+
+```java
+public void sendPacket(ServerPacket packet)
+
+public void sendPacket(SystemMessageId systemMessageId)
+```
+
+Sends a packet to the client.
+
+<ParamField path="packet" type="ServerPacket" required>
+  The server packet to send
+</ParamField>
+
+**Implementation**:
+```java
+public void sendPacket(ServerPacket packet)
+{
+    if (packet == null)
+    {
+        LOGGER.warning(TraceUtil.getStackTrace(new Exception()));
+        return;
+    }
+    
+    writePacket(packet);
+    packet.runImpl(_player);
+}
+```
+
+##### close()
+
+```java
+public void close(ServerPacket packet)
+
+public void closeNow()
+```
+
+Closes the client connection, optionally sending a final packet.
+
+<ParamField path="packet" type="ServerPacket">
+  Optional packet to send before closing (e.g., disconnect message)
+</ParamField>
+
+#### Player Management
+
+##### getPlayer() / setPlayer()
+
+```java
+public Player getPlayer()
+
+public void setPlayer(Player player)
+```
+
+Gets or sets the active player character associated with this client.
+
+##### load()
+
+```java
+public Player load(int characterSlot)
+```
+
+Loads a character from the database for the specified character slot.
+
+<ParamField path="characterSlot" type="int" required>
+  The character slot index (0-based)
+</ParamField>
+
+<ResponseField name="returns" type="Player">
+  The loaded player instance, or null if loading failed
+</ResponseField>
+
+**Location**: `GameClient.java:495`
+
+**Loading sequence**:
+1. Validates character slot and retrieves object ID
+2. Checks for duplicate login attempts
+3. Loads character data from database
+4. Sets default states (running, standing)
+5. Refreshes overload and expertise penalties
+
+#### Character Management
+
+##### markToDeleteChar()
+
+```java
+public byte markToDeleteChar(int characterSlot)
+```
+
+Marks a character for deletion or deletes it immediately based on configuration.
+
+<ParamField path="characterSlot" type="int" required>
+  The character slot to delete
+</ParamField>
+
+<ResponseField name="returns" type="byte">
+  - `-1`: Error occurred
+  - `0`: Character deleted or marked for deletion
+  - `1`: Character is clan member (cannot delete)
+  - `2`: Character is clan leader (cannot delete)
+</ResponseField>
+
+**Location**: `GameClient.java:254`
+
+##### restore()
+
+```java
+public void restore(int characterSlot)
+```
+
+Restores a character that was marked for deletion.
+
+<ParamField path="characterSlot" type="int" required>
+  The character slot to restore
+</ParamField>
+
+#### Session Management
+
+##### setAccountName() / getAccountName()
+
+```java
+public void setAccountName(String accountName)
+
+public String getAccountName()
+```
+
+Manages the account name for this connection.
+
+##### setSessionId() / getSessionId()
+
+```java
+public void setSessionId(SessionKey sessionKey)
+
+public SessionKey getSessionId()
+```
+
+Manages the session key used for authentication with the login server.
+
+#### Protection & Security
+
+##### getFloodProtectors()
+
+```java
+public FloodProtectors getFloodProtectors()
+```
+
+<ResponseField name="returns" type="FloodProtectors">
+  The flood protection manager for this client
+</ResponseField>
+
+Provides access to various flood protection mechanisms (chat, actions, packets).
+
+##### getPlayerLock()
+
+```java
+public ReentrantLock getPlayerLock()
+```
+
+<ResponseField name="returns" type="ReentrantLock">
+  A reentrant lock for thread-safe player operations
+</ResponseField>
+
+---
+
+## GamePacketHandler
+
+Handles incoming packets from game clients by interpreting packet IDs and creating appropriate packet instances.
+
+**Package**: `org.l2jmobius.gameserver.network`
+
+**Location**: `GamePacketHandler.java:33`
+
+### Class Signature
+
+```java
+public class GamePacketHandler implements PacketHandler<GameClient>
+```
+
+### Methods
+
+#### handlePacket()
+
+```java
+@Override
+public ReadablePacket<GameClient> handlePacket(ReadableBuffer buffer, GameClient client)
+```
+
+Converts raw buffer data into a typed packet instance.
+
+<ParamField path="buffer" type="ReadableBuffer" required>
+  The buffer containing the packet data
+</ParamField>
+
+<ParamField path="client" type="GameClient" required>
+  The client that sent the packet
+</ParamField>
+
+<ResponseField name="returns" type="ReadablePacket<GameClient>">
+  The created packet instance, or null if invalid
+</ResponseField>
+
+### Packet Processing Flow
+
+<Steps>
+  <Step title="Read Packet ID">
+    Extracts the first byte as the packet ID
+    ```java
+    final int packetId = Byte.toUnsignedInt(buffer.readByte());
+    ```
+  </Step>
+  
+  <Step title="Check for Extended Packet">
+    If packet ID is `0xD0`, reads additional 2 bytes for extended packet ID
+    ```java
+    case 0xD0: // Ex client packet
+        final int exPacketId = Short.toUnsignedInt(buffer.readShort());
+    ```
+  </Step>
+  
+  <Step title="Validate Packet ID">
+    Ensures the packet ID is within valid range
+    ```java
+    if ((packetId < 0) || (packetId >= ClientPackets.PACKET_ARRAY.length))
+        return null;
+    ```
+  </Step>
+  
+  <Step title="Find Packet Enum">
+    Looks up the packet enum from the packet array
+    ```java
+    final ClientPackets packetEnum = ClientPackets.PACKET_ARRAY[packetId];
+    ```
+  </Step>
+  
+  <Step title="Validate Connection State">
+    Checks if the packet is allowed in the client's current state
+    ```java
+    if (!packetEnum.getConnectionStates().contains(client.getConnectionState()))
+        return null;
+    ```
+  </Step>
+  
+  <Step title="Create Packet Instance">
+    Instantiates the packet using the enum's factory method
+    ```java
+    return packetEnum.newPacket();
+    ```
+  </Step>
+</Steps>
+
+### Packet Types
+
+**Normal Packets**: Single-byte packet ID (0x00 - 0xFF, excluding 0xD0)
+
+**Extended Packets**: Three-byte header (0xD0 + 2-byte extended ID)
+
+---
+
+## PacketHandler Interface
+
+Functional interface for packet handling implementations.
+
+**Package**: `org.l2jmobius.commons.network`
+
+**Location**: `PacketHandler.java:28`
+
+### Interface Signature
+
+```java
+@FunctionalInterface
+public interface PacketHandler<T extends Client<Connection<T>>>
+```
+
+### Method
+
+```java
+ReadablePacket<T> handlePacket(ReadableBuffer buffer, T client);
+```
+
+Converts raw buffer data into a readable packet.
+
+<ParamField path="buffer" type="ReadableBuffer" required>
+  The buffer containing the data to be converted
+</ParamField>
+
+<ParamField path="client" type="T" required>
+  The client who sent the data
+</ParamField>
+
+<ResponseField name="returns" type="ReadablePacket<T>">
+  A packet instance corresponding to the received data
+</ResponseField>
+
+---
+
+## Usage Examples
+
+### Creating a Network Connection Manager
+
+```java
+// Start the game server network listener
+ConnectionManager<GameClient> connectionManager = new ConnectionManager<>(
+    new InetSocketAddress("0.0.0.0", 7777),  // Bind to all interfaces on port 7777
+    GameClient::new,                          // Client factory
+    new GamePacketHandler()                   // Packet handler
+);
+```
+
+### Sending Packets to a Client
+
+```java
+GameClient client = ...; // Obtain client reference
+
+// Send a system message
+client.sendPacket(SystemMessageId.WELCOME_TO_LINEAGE);
+
+// Send a custom server packet
+ServerPacket packet = new CreatureSay(...);
+client.sendPacket(packet);
+```
+
+### Handling Client Disconnection
+
+```java
+// Graceful disconnect with final packet
+client.close(new LeaveWorld());
+
+// Immediate disconnect
+client.closeNow();
+```
+
+### Loading a Character
+
+```java
+GameClient client = ...;
+int characterSlot = 0;  // First character slot
+
+Player player = client.load(characterSlot);
+if (player != null)
+{
+    client.setPlayer(player);
+    client.setConnectionState(ConnectionState.IN_GAME);
+}
+```
+
+---
+
+## Network Configuration
+
+Key configuration options affecting the network layer:
+
+- `ServerConfig.PORT_GAME` - Game server listening port (default: 7777)
+- `ConnectionConfig.threadPoolSize` - I/O thread pool size
+- `ConnectionConfig.useNagle` - Enable/disable Nagle's algorithm
+- `ConnectionConfig.shutdownWaitTime` - Graceful shutdown timeout
+
+---
+
+## Related Components
+
+- [GameServer](/api/game-server) - Main server initialization
+- [DatabaseFactory](/api/database) - Database connections used by GameClient
+- `FloodProtectors` - Client action rate limiting
+- `Encryption` - Packet encryption/decryption
+- `ConnectionState` - Client connection state enum

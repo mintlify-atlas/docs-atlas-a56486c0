@@ -1,0 +1,383 @@
+---
+title: 'Database Setup'
+description: 'MySQL/MariaDB installation, schema deployment, and database configuration for L2J Mobius Chronicle 4'
+---
+
+## Database Requirements
+
+L2J Mobius Chronicle 4 requires a MySQL or MariaDB database server.
+
+### Supported Versions
+
+- **MySQL**: 5.7 or higher
+- **MariaDB**: 10.3 or higher (recommended)
+
+### Database Structure
+
+The server uses a **single database** for both login and game data:
+- Default database name: `l2jmobiusc4`
+- Contains both account and game world data
+
+## Installing MySQL/MariaDB
+
+<Tabs>
+  <Tab title="Ubuntu/Debian">
+    ```bash
+    # Install MariaDB (recommended)
+    sudo apt-get update
+    sudo apt-get install mariadb-server mariadb-client
+
+    # Start and enable service
+    sudo systemctl start mariadb
+    sudo systemctl enable mariadb
+
+    # Secure installation
+    sudo mysql_secure_installation
+    ```
+  </Tab>
+  <Tab title="CentOS/RHEL">
+    ```bash
+    # Install MariaDB
+    sudo yum install mariadb-server mariadb
+
+    # Start and enable service
+    sudo systemctl start mariadb
+    sudo systemctl enable mariadb
+
+    # Secure installation
+    sudo mysql_secure_installation
+    ```
+  </Tab>
+  <Tab title="Windows">
+    Download and install MySQL or MariaDB from:
+    - MySQL: https://dev.mysql.com/downloads/installer/
+    - MariaDB: https://mariadb.org/download/
+
+    Or install via XAMPP which includes MariaDB:
+    ```
+    Download XAMPP from https://www.apachefriends.org/
+    Install and start MySQL/MariaDB service
+    ```
+  </Tab>
+</Tabs>
+
+## Creating the Database
+
+<Steps>
+  <Step title="Connect to MySQL">
+    ```bash
+    mysql -u root -p
+    ```
+    Enter your root password when prompted.
+  </Step>
+
+  <Step title="Create Database">
+    ```sql
+    CREATE DATABASE l2jmobiusc4 DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+    ```
+
+    <Info>
+      The database name `l2jmobiusc4` matches the default configuration in the server files.
+    </Info>
+  </Step>
+
+  <Step title="Create Database User">
+    ```sql
+    -- Create user (replace 'your_password' with a strong password)
+    CREATE USER 'l2jmobius'@'localhost' IDENTIFIED BY 'your_password';
+
+    -- Grant privileges
+    GRANT ALL PRIVILEGES ON l2jmobiusc4.* TO 'l2jmobius'@'localhost';
+    FLUSH PRIVILEGES;
+
+    -- For remote access (optional, adjust IP as needed)
+    CREATE USER 'l2jmobius'@'%' IDENTIFIED BY 'your_password';
+    GRANT ALL PRIVILEGES ON l2jmobiusc4.* TO 'l2jmobius'@'%';
+    FLUSH PRIVILEGES;
+    ```
+
+    <Warning>
+      Using `root` for the database connection is **not recommended** for production servers. Create a dedicated user with appropriate permissions.
+    </Warning>
+  </Step>
+
+  <Step title="Verify Database">
+    ```sql
+    SHOW DATABASES;
+    USE l2jmobiusc4;
+    ```
+  </Step>
+</Steps>
+
+## Installing Database Schema
+
+L2J Mobius provides a DatabaseInstaller tool for easy schema installation.
+
+<Steps>
+  <Step title="Configure Database Connection">
+    Before running the installer, configure the database connection in:
+    
+    `db_installer/config/Database.ini`
+
+    ```ini
+    # Database driver (MySQL/MariaDB)
+    Driver = com.mysql.cj.jdbc.Driver
+
+    # Database connection URL
+    URL = jdbc:mysql://localhost/l2jmobiusc4?useUnicode=true&characterEncoding=utf-8&allowPublicKeyRetrieval=true&useSSL=false&connectTimeout=10000&interactiveClient=true&sessionVariables=wait_timeout=600,interactive_timeout=600&autoReconnect=true
+
+    # Database credentials
+    Login = l2jmobius
+    Password = your_password
+    ```
+
+    <Note>
+      Replace `your_password` with the password you created for the database user.
+    </Note>
+  </Step>
+
+  <Step title="Run Database Installer">
+    <Tabs>
+      <Tab title="Linux">
+        ```bash
+        cd db_installer
+        chmod +x DatabaseInstaller.sh
+        ./DatabaseInstaller.sh
+        ```
+      </Tab>
+      <Tab title="Windows">
+        ```cmd
+        cd db_installer
+        DatabaseInstaller.bat
+        ```
+        
+        Or double-click `DatabaseInstaller.vbs` for GUI mode.
+      </Tab>
+    </Tabs>
+
+    The installer will:
+    - Connect to your database
+    - Display available SQL files
+    - Allow you to install game and login tables
+  </Step>
+
+  <Step title="Install Tables">
+    The DatabaseInstaller provides SQL scripts for:
+
+    **Login Server Tables** (`sql/login/`):
+    - `accounts.sql` - Player account data
+    - `account_data.sql` - Extended account information
+    - `accounts_ipauth.sql` - IP authentication
+    - `gameservers.sql` - Registered game servers
+
+    **Game Server Tables** (`sql/game/`):
+    - Over 100+ tables for game world data
+    - Character data, items, clans, castles, etc.
+    - Quest states, skills, inventory
+    - Olympiad, sieges, and more
+
+    <Info>
+      Select "Install" for both Login and Game schemas when prompted by the DatabaseInstaller.
+    </Info>
+  </Step>
+
+  <Step title="Verify Installation">
+    ```bash
+    mysql -u l2jmobius -p l2jmobiusc4
+    ```
+
+    ```sql
+    -- Check installed tables
+    SHOW TABLES;
+
+    -- Verify key tables exist
+    SELECT COUNT(*) FROM accounts;
+    SELECT COUNT(*) FROM gameservers;
+    SELECT COUNT(*) FROM characters;
+    ```
+  </Step>
+</Steps>
+
+## Database Configuration Files
+
+After schema installation, configure database connections for both servers:
+
+<CodeGroup>
+```ini game/config/Database.ini
+# ---------------------------------------------------------------------------
+# Game Server Database Configuration
+# ---------------------------------------------------------------------------
+
+# JDBC Driver
+Driver = com.mysql.cj.jdbc.Driver
+
+# Database URL with connection parameters
+URL = jdbc:mysql://localhost/l2jmobiusc4?useUnicode=true&characterEncoding=utf-8&allowPublicKeyRetrieval=true&useSSL=false&connectTimeout=10000&interactiveClient=true&sessionVariables=wait_timeout=600,interactive_timeout=600&autoReconnect=true
+
+# Credentials (use dedicated user, not root)
+Login = l2jmobius
+Password = your_password
+
+# Connection Pool Settings
+# GameServer requires more connections for handling players
+MaximumDatabaseConnections = 500
+
+# Test connections before use (adds overhead)
+TestDatabaseConnections = False
+
+# ---------------------------------------------------------------------------
+# Automatic Backup Settings
+# ---------------------------------------------------------------------------
+
+# Enable automatic backups on restart/shutdown
+BackupDatabase = False
+
+# MySQL bin folder path (Windows only)
+MySqlBinLocation = C:/xampp/mysql/bin/
+
+# Backup storage path
+BackupPath = ../backup/
+
+# Retention period in days (0 = unlimited)
+BackupDays = 30
+```
+
+```ini login/config/Database.ini
+# ---------------------------------------------------------------------------
+# Login Server Database Configuration
+# ---------------------------------------------------------------------------
+
+# JDBC Driver
+Driver = com.mysql.cj.jdbc.Driver
+
+# Database URL (same database as GameServer)
+URL = jdbc:mysql://localhost/l2jmobiusc4?useUnicode=true&characterEncoding=utf-8&allowPublicKeyRetrieval=true&useSSL=false&connectTimeout=10000&interactiveClient=true&sessionVariables=wait_timeout=600,interactive_timeout=600&autoReconnect=true
+
+# Credentials (same as GameServer)
+Login = l2jmobius
+Password = your_password
+
+# Connection Pool Settings
+# LoginServer needs fewer connections
+MaximumDatabaseConnections = 5
+
+# Test connections before use
+TestDatabaseConnections = False
+
+# Backup settings (typically handled by GameServer)
+BackupDatabase = False
+BackupPath = ../backup/
+BackupDays = 30
+```
+</CodeGroup>
+
+<Warning>
+  Both LoginServer and GameServer must use the **same database** (`l2jmobiusc4`) with identical credentials.
+</Warning>
+
+## Connection Pool Optimization
+
+### GameServer Pool Settings
+
+From `game/config/Database.ini:20`:
+
+```ini
+# Default: 100, Recommended: 500 for high-population servers
+MaximumDatabaseConnections = 500
+```
+
+<Info>
+  The GameServer handles multiple simultaneous player connections and requires a larger connection pool.
+</Info>
+
+### LoginServer Pool Settings
+
+From `login/config/Database.ini:20`:
+
+```ini
+# Default: 5 (sufficient for most setups)
+MaximumDatabaseConnections = 5
+```
+
+## Database Backup Configuration
+
+Enable automatic backups for production servers:
+
+```ini
+# Enable automatic backups
+BackupDatabase = True
+
+# Windows: Specify MySQL bin location
+MySqlBinLocation = C:/xampp/mysql/bin/
+
+# Linux: Usually auto-detected, leave default
+# MySqlBinLocation = /usr/bin/
+
+# Backup storage path (relative to server directory)
+BackupPath = ../backup/
+
+# Automatically delete backups older than X days
+BackupDays = 30
+```
+
+<Note>
+  Backups are triggered when the server restarts or shuts down gracefully.
+</Note>
+
+## Troubleshooting
+
+### Connection Errors
+
+**Error: "Access denied for user"**
+```bash
+# Verify user permissions
+mysql -u root -p
+```
+```sql
+SHOW GRANTS FOR 'l2jmobius'@'localhost';
+GRANT ALL PRIVILEGES ON l2jmobiusc4.* TO 'l2jmobius'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+**Error: "Unknown database 'l2jmobiusc4'"**
+```sql
+CREATE DATABASE l2jmobiusc4;
+```
+
+**Error: "Too many connections"**
+```sql
+-- Check current connections
+SHOW PROCESSLIST;
+
+-- Increase max connections in MySQL config
+SET GLOBAL max_connections = 1000;
+```
+
+### Performance Tuning
+
+For high-population servers, optimize MySQL settings in `/etc/mysql/my.cnf` or `my.ini`:
+
+```ini
+[mysqld]
+max_connections = 1000
+innodb_buffer_pool_size = 4G
+innodb_log_file_size = 512M
+innodb_flush_log_at_trx_commit = 2
+query_cache_size = 0
+query_cache_type = 0
+```
+
+<Warning>
+  Restart MySQL after configuration changes:
+  ```bash
+  sudo systemctl restart mariadb
+  ```
+</Warning>
+
+## Next Steps
+
+With the database configured:
+
+1. [Configure the LoginServer](/setup/login-server)
+2. [Configure the GameServer](/setup/game-server)
+3. [Review server configuration files](/setup/configuration)

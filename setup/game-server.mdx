@@ -1,0 +1,483 @@
+---
+title: 'GameServer Configuration'
+description: 'GameServer setup, network configuration, port settings, and startup procedures'
+---
+
+## Overview
+
+The GameServer handles the game world, player interactions, NPCs, quests, and all in-game mechanics. It connects to the LoginServer for player authentication.
+
+## Network Configuration
+
+The GameServer requires proper network configuration for both local and remote client connections.
+
+### Server Configuration
+
+Edit `game/config/Server.ini`:
+
+```ini
+# ---------------------------------------------------------------------------
+# Game Server Networking
+# ---------------------------------------------------------------------------
+
+# LoginServer connection
+# Where this GameServer connects to authenticate
+LoginHost = 127.0.0.1
+LoginPort = 9014
+
+# GameServer bind address
+# Use 0.0.0.0 to bind on all interfaces
+GameserverHostname = 0.0.0.0
+GameserverPort = 7777
+
+# Server identification
+RequestServerID = 1
+AcceptAlternateID = True
+```
+
+<Note>
+  From `game/config/Server.ini:19-32`, these are the core networking settings that connect your GameServer to the LoginServer.
+</Note>
+
+### Port Configuration
+
+| Port | Protocol | Purpose | Configurable |
+|------|----------|---------|-------------|
+| **7777** | TCP | Game client connections | Yes (`GameserverPort`) |
+| **9014** | TCP | LoginServer connection | Yes (`LoginPort`) |
+
+<Warning>
+  Ensure port **7777** is open in your firewall for incoming client connections.
+</Warning>
+
+### IP Configuration
+
+For proper client connectivity, configure IP addresses in `game/config/default-ipconfig.xml`:
+
+<Steps>
+  <Step title="Rename Configuration File">
+    ```bash
+    cd game/config
+    cp default-ipconfig.xml ipconfig.xml
+    ```
+
+    <Info>
+      The server only reads `ipconfig.xml`. The `default-ipconfig.xml` is a template.
+    </Info>
+  </Step>
+
+  <Step title="Configure External IP">
+    Edit `ipconfig.xml` with your server's public IP:
+
+    ```xml
+    <?xml version="1.0" encoding="UTF-8"?>
+    <gameserver address="YOUR.PUBLIC.IP.HERE" 
+                xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+                xsi:noNamespaceSchemaLocation="../data/xsd/ipconfig.xsd">
+      
+      <!-- Localhost connections -->
+      <define subnet="127.0.0.0/8" address="127.0.0.1" />
+      
+      <!-- LAN connections (adjust to your network) -->
+      <define subnet="192.168.0.0/16" address="192.168.1.100" />
+      
+    </gameserver>
+    ```
+
+    **Configuration breakdown:**
+    - `gameserver address`: Your **public/external IP** for internet clients
+    - `subnet/address` pairs: Internal network routing
+  </Step>
+
+  <Step title="Network Scenarios">
+    <Tabs>
+      <Tab title="Local Testing">
+        ```xml
+        <gameserver address="127.0.0.1">
+          <define subnet="127.0.0.0/8" address="127.0.0.1" />
+        </gameserver>
+        ```
+      </Tab>
+      <Tab title="LAN Server">
+        ```xml
+        <gameserver address="192.168.1.100">
+          <define subnet="127.0.0.0/8" address="127.0.0.1" />
+          <define subnet="192.168.0.0/16" address="192.168.1.100" />
+        </gameserver>
+        ```
+      </Tab>
+      <Tab title="Public Server">
+        ```xml
+        <gameserver address="203.0.113.50">
+          <define subnet="127.0.0.0/8" address="127.0.0.1" />
+          <define subnet="192.168.0.0/16" address="192.168.1.100" />
+        </gameserver>
+        ```
+      </Tab>
+    </Tabs>
+  </Step>
+</Steps>
+
+## Server Settings
+
+### Basic Configuration
+
+Key settings from `game/config/Server.ini`:
+
+```ini
+# ---------------------------------------------------------------------------
+# Server Identity
+# ---------------------------------------------------------------------------
+
+# Server ID for LoginServer registration
+# Default: 1 = Bartz
+RequestServerID = 1
+
+# Accept alternate ID if requested ID is taken
+AcceptAlternateID = True
+
+# Maximum concurrent players
+MaximumOnlineUsers = 3500
+
+# Supported protocol versions (Chronicle 4)
+AllowedProtocolRevisions = 656;660
+
+# ---------------------------------------------------------------------------
+# Server Display Settings
+# ---------------------------------------------------------------------------
+
+# Server type shown in server list
+# Values: Normal, Relax, Test, Broad, Restricted, Event, Free, World, New, Classic
+ServerListType = Free
+
+# Age restriction (0, 15, or 18)
+ServerListAge = 0
+
+# Display brackets [] before server name
+ServerListBrackets = False
+
+# Show clock icon next to server name
+ServerListClock = False
+```
+
+### Resource Paths
+
+```ini
+# Server root directory
+DatapackRoot = .
+
+# Scripts location
+ScriptRoot = ./data/scripts
+```
+
+<Note>
+  The `.` (dot) refers to the `game/` directory. Scripts are loaded from `game/data/scripts/`.
+</Note>
+
+## Thread Configuration
+
+Optimize thread pools in `game/config/Threads.ini`:
+
+```ini
+# Scheduled thread pool size
+# -1 = auto (CPU cores × 4)
+# Default: 32
+ScheduledThreadPoolSize = 32
+
+# Instant thread pool size
+# -1 = auto (CPU cores × 2)
+# Default: 32
+InstantThreadPoolSize = 32
+
+# Use threading to speed up server startup
+ThreadsForLoading = True
+```
+
+<Info>
+  From `game/config/Threads.ini:6-16`, adjust these values based on your CPU core count and expected player load.
+</Info>
+
+## Network Protection
+
+Advanced DDoS and flood protection settings in `game/config/Network.ini`:
+
+```ini
+# ---------------------------------------------------------------------------
+# Security Settings
+# ---------------------------------------------------------------------------
+
+# Maximum connections per IP address
+MaxConnectionsPerIP = 10
+
+# Minimum time between connections (milliseconds)
+MinConnectionInterval = 1000
+
+# Maximum packets per second per client
+MaxPacketsPerSecond = 80
+
+# Maximum bytes per second per client
+MaxBytesPerSecond = 102400
+
+# Maximum concurrent virtual threads
+MaxVirtualThreads = 5000
+
+# ---------------------------------------------------------------------------
+# Packet Management
+# ---------------------------------------------------------------------------
+
+# Enable packet dropping under heavy load
+DropPackets = True
+
+# Queue threshold before dropping packets
+DropPacketThreshold = 5000
+
+# Shutdown wait time for packet finalization (seconds)
+ShutdownWaitTime = 5
+```
+
+## Startup Configuration
+
+### Starting the GameServer
+
+<Tabs>
+  <Tab title="Linux">
+    ```bash
+    cd game
+    
+    # Make scripts executable (first time only)
+    chmod +x GameServer.sh GameServerTask.sh
+    
+    # Start server
+    ./GameServer.sh
+    
+    # Or run in background
+    nohup ./GameServer.sh &
+    
+    # View logs
+    tail -f log/stdout.log
+    ```
+
+    The `GameServerTask.sh` script at `game/GameServerTask.sh:10` handles:
+    - Automatic restarts on crash
+    - Log rotation
+    - JVM configuration from `java.cfg`
+  </Tab>
+  <Tab title="Windows">
+    ```cmd
+    cd game
+    GameServer.bat
+    ```
+    
+    Or double-click `GameServer.bat` in the `game/` folder.
+  </Tab>
+</Tabs>
+
+### JVM Configuration
+
+Edit `game/java.cfg` to adjust memory and JVM settings:
+
+```bash
+-server 
+-Dfile.encoding=UTF-8 
+-Djava.util.logging.manager=org.l2jmobius.log.ServerLogManager 
+-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn 
+-XX:+UseZGC 
+-Xmx32g      # Maximum heap (adjust for your RAM)
+-Xms16g      # Initial heap (adjust for your RAM)
+```
+
+<Warning>
+  **Memory Guidelines:**
+  - Small server (under 100 players): -Xmx4g -Xms2g
+  - Medium server (100-500 players): -Xmx16g -Xms8g
+  - Large server (500+ players): -Xmx32g -Xms16g
+  
+  Ensure your system has sufficient RAM available.
+</Warning>
+
+## Server Monitoring
+
+### Deadlock Detection
+
+Enable deadlock monitoring in `game/config/Server.ini`:
+
+```ini
+# ---------------------------------------------------------------------------
+# Deadlock Watcher
+# ---------------------------------------------------------------------------
+
+# Enable deadlock detection
+DeadlockWatcher = True
+
+# Check interval (seconds)
+DeadlockCheckInterval = 20
+
+# Automatically restart on deadlock
+RestartOnDeadlock = False
+```
+
+### Precautionary Restart
+
+Automatic restart based on resource usage:
+
+```ini
+# ---------------------------------------------------------------------------
+# Precautionary Server Restart
+# ---------------------------------------------------------------------------
+
+# Enable automatic restart on high resource usage
+PrecautionaryRestartEnabled = False
+
+# Monitor CPU usage
+PrecautionaryRestartCpu = True
+
+# Monitor memory usage
+PrecautionaryRestartMemory = False
+
+# Check for active sieges/olympiad before restart
+PrecautionaryRestartChecks = True
+
+# Threshold percentage (95 = restart at 95% usage)
+PrecautionaryRestartPercentage = 95
+
+# Check interval (seconds)
+PrecautionaryRestartDelay = 60
+```
+
+### Scheduled Restart
+
+Configure automatic scheduled restarts:
+
+```ini
+# ---------------------------------------------------------------------------
+# Scheduled Server Restart
+# ---------------------------------------------------------------------------
+
+# Enable scheduled restarts
+ServerRestartScheduleEnabled = False
+
+# Notify players on login about restart schedule
+ServerRestartScheduleMessage = False
+
+# Countdown before restart (seconds)
+ServerRestartScheduleCountdown = 600
+
+# Restart time (24-hour format, comma-separated)
+ServerRestartSchedule = 08:00
+
+# Days of week (1=Sunday, 2=Monday, ..., 7=Saturday)
+ServerRestartDays = 4
+```
+
+## Health Checks
+
+Verify GameServer is running correctly:
+
+### Check Server Process
+
+```bash
+# Linux
+ps aux | grep GameServer
+netstat -tlnp | grep 7777
+
+# Check if port is listening
+ss -tlnp | grep 7777
+```
+
+### Monitor Logs
+
+```bash
+# Real-time log monitoring
+tail -f game/log/stdout.log
+
+# Check for errors
+grep -i error game/log/*.log
+grep -i exception game/log/*.log
+```
+
+### Test Connection
+
+```bash
+# Test if GameServer port is accessible
+telnet localhost 7777
+
+# Or using nc (netcat)
+nc -zv localhost 7777
+```
+
+## Common Configuration Files
+
+Key configuration files in `game/config/`:
+
+| File | Purpose |
+|------|--------|
+| `Server.ini` | Core server settings, networking, player limits |
+| `Database.ini` | Database connection configuration |
+| `Network.ini` | Network protection, buffer pools, packet handling |
+| `Threads.ini` | Thread pool configuration |
+| `General.ini` | GM settings, security, gameplay features |
+| `Rates.ini` | XP/SP/Drop rate multipliers |
+| `Player.ini` | Player-related settings |
+| `NPC.ini` | NPC behavior configuration |
+| `Feature.ini` | Enable/disable game features |
+| `GeoEngine.ini` | Geodata engine settings |
+| `FloodProtector.ini` | Anti-flood protection |
+| `Olympiad.ini` | Olympiad system configuration |
+| `Siege.ini` | Castle siege settings |
+
+## Troubleshooting
+
+### Server Won't Start
+
+1. **Check Java version:**
+   ```bash
+   java -version
+   # Must be Java 25
+   ```
+
+2. **Verify database connection:**
+   - Check `game/config/Database.ini` credentials
+   - Test database connectivity: `mysql -u username -p database_name`
+
+3. **Check port availability:**
+   ```bash
+   # Ensure port 7777 is not in use
+   netstat -tlnp | grep 7777
+   ```
+
+4. **Review logs:**
+   ```bash
+   cat game/log/stdout.log
+   ```
+
+### Can't Connect to LoginServer
+
+**Error: "Connection refused to LoginServer"**
+
+- Verify LoginServer is running: `ps aux | grep LoginServer`
+- Check `LoginHost` and `LoginPort` in `game/config/Server.ini:19-23`
+- Ensure LoginServer is listening: `netstat -tlnp | grep 9014`
+
+### Clients Can't Connect
+
+1. **Verify IP configuration:**
+   - Check `game/config/ipconfig.xml` has correct public IP
+   - Ensure `gameserver address` matches your external IP
+
+2. **Check firewall:**
+   ```bash
+   # Allow port 7777
+   sudo ufw allow 7777/tcp
+   ```
+
+3. **Verify GameServer is registered:**
+   - Check LoginServer logs
+   - Verify in database: `SELECT * FROM gameservers;`
+
+## Next Steps
+
+With the GameServer configured:
+
+1. [Configure the LoginServer](/setup/login-server)
+2. [Review all configuration files](/setup/configuration)
+3. Start both servers and test connections

@@ -1,0 +1,583 @@
+---
+title: 'AI Scripting Guide'
+description: 'Create custom AI behaviors for NPCs, monsters, and raid bosses with real examples'
+---
+
+## Overview
+
+AI scripts in L2J Mobius control NPC behavior, boss mechanics, and zone interactions. Unlike quests, AI scripts extend the `Script` class and respond to various NPC lifecycle events.
+
+## AI Script Types
+
+<CardGroup cols={3}>
+  <Card title="Boss AI" icon="dragon">
+    Complex mechanics for raid bosses (Antharas, Baium, Valakas)
+  </Card>
+  <Card title="Area AI" icon="map">
+    Zone-specific behaviors and spawns
+  </Card>
+  <Card title="NPC AI" icon="users">
+    Teleporters, buffers, merchants, guards
+  </Card>
+</CardGroup>
+
+## Basic AI Structure
+
+```java
+package ai.others.MyCustomAI;
+
+import org.l2jmobius.gameserver.model.actor.Npc;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.script.Script;
+
+public class MyCustomAI extends Script {
+    // NPC IDs
+    private static final int NPC_ID = 30001;
+    
+    private MyCustomAI() {
+        addStartNpc(NPC_ID);
+        addTalkId(NPC_ID);
+        addSpawnId(NPC_ID);
+    }
+    
+    @Override
+    public String onFirstTalk(Npc npc, Player player) {
+        return npc.getId() + ".html";
+    }
+    
+    public static void main(String[] args) {
+        new MyCustomAI();
+    }
+}
+```
+
+## Boss AI Example: Antharas
+
+Let's examine the Antharas raid boss AI:
+
+### Constructor and Registration
+
+```java ai/bosses/Antharas/Antharas.java (lines 124-192)
+private Antharas() {
+    addStartNpc(HEART, TELEPORT_CUBE);
+    addTalkId(HEART, TELEPORT_CUBE);
+    addFirstTalkId(HEART);
+    addSpawnId(INVISIBLE_NPC.keySet());
+    addSpawnId(ANTHARAS);
+    addSpellFinishedId(ANTHARAS);
+    
+    // Load boss status from database
+    final StatSet info = GrandBossManager.getInstance().getStatSet(ANTHARAS);
+    final double curr_hp = info.getDouble("currentHP");
+    final double curr_mp = info.getDouble("currentMP");
+    
+    switch (getStatus()) {
+        case ALIVE:
+            _antharas = (GrandBoss) addSpawn(ANTHARAS, 185708, 114298, -8221, 0, false, 0);
+            _antharas.setCurrentHpMp(curr_hp, curr_mp);
+            addBoss(_antharas);
+            break;
+        case WAITING:
+            _antharas = (GrandBoss) addSpawn(ANTHARAS, 185708, 114298, -8221, 0, false, 0);
+            startQuestTimer("SPAWN_ANTHARAS", GrandBossConfig.ANTHARAS_WAIT_TIME * 60000, null, null);
+            break;
+        case IN_FIGHT:
+            _antharas = (GrandBoss) addSpawn(ANTHARAS, loc_x, loc_y, loc_z, heading, false, 0);
+            _lastAttack = System.currentTimeMillis();
+            startQuestTimer("CHECK_ATTACK", 60000, _antharas, null);
+            break;
+    }
+}
+```
+
+### Event Handling
+
+<Tabs>
+  <Tab title="Player Entry">
+    Handle player entering boss zone:
+    
+    ```java ai/bosses/Antharas/Antharas.java (lines 199-225)
+    case "ENTER": {
+        String htmltext = null;
+        if (getStatus() == DEAD) {
+            htmltext = "13001-01.html"; // Boss is dead
+        } else if (getStatus() == IN_FIGHT) {
+            htmltext = "13001-02.html"; // Fight in progress
+        } else if (!hasQuestItems(player, STONE)) {
+            htmltext = "13001-03.html"; // Missing entry item
+        } else if (hasQuestItems(player, STONE)) {
+            takeItems(player, STONE, 1);
+            player.teleToLocation(179700 + getRandom(700), 113800 + getRandom(2100), -7709);
+            
+            if (getStatus() != WAITING) {
+                setStatus(WAITING);
+                startQuestTimer("SPAWN_ANTHARAS", GrandBossConfig.ANTHARAS_WAIT_TIME * 60000, null, null);
+            }
+        }
+        return htmltext;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Boss Spawn">
+    Cinematic boss spawn sequence:
+    
+    ```java ai/bosses/Antharas/Antharas.java (lines 232-298)
+    case "SPAWN_ANTHARAS": {
+        _antharas.disableCoreAI(true);
+        _antharas.setRandomWalking(false);
+        _antharas.teleToLocation(181323, 114850, -7623, 32542);
+        setStatus(IN_FIGHT);
+        _lastAttack = System.currentTimeMillis();
+        ZONE.broadcastPacket(new PlaySound("BS02_A"));
+        startQuestTimer("CAMERA_1", 23, _antharas, null);
+        break;
+    }
+    
+    case "CAMERA_1": {
+        ZONE.broadcastPacket(new SpecialCamera(npc, 700, 13, -19, 0, 10000, 20000, 0, 0, 0, 0, 0));
+        startQuestTimer("CAMERA_2", 3000, npc, null);
+        break;
+    }
+    
+    case "CAMERA_3": {
+        ZONE.broadcastPacket(new SpecialCamera(npc, 3700, 0, -3, 0, 10000, 10000, 0, 0, 0, 0, 0));
+        ZONE.broadcastPacket(new SocialAction(npc.getObjectId(), 1));
+        startQuestTimer("START_MOVE", 1900, npc, null);
+        break;
+    }
+    
+    case "START_MOVE": {
+        _antharas.disableCoreAI(false);
+        _antharas.setRandomWalking(true);
+        
+        // Check for heroes in zone
+        for (Player players : World.getInstance().getVisibleObjectsInRange(npc, Player.class, 4000)) {
+            if (players.isHero()) {
+                npc.broadcastSay(ChatType.NPC_SHOUT, 
+                    players.getName() + "!!!! You cannot hope to defeat me with your meager strength.");
+                break;
+            }
+        }
+        
+        npc.getAI().setIntention(Intention.MOVE_TO, new Location(179011, 114871, -7704));
+        startQuestTimer("CHECK_ATTACK", 60000, npc, null);
+        break;
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Combat AI">
+    Dynamic skill selection based on HP and positioning:
+    
+    ```java ai/bosses/Antharas/Antharas.java (lines 801-1037)
+    private void manageSkills(Npc npc) {
+        if (npc.isCastingNow() || npc.isCoreAIDisabled() || !npc.isInCombat()) {
+            return;
+        }
+        
+        // Find highest threat target
+        Player c2 = null;
+        int maxHate = 0;
+        
+        if (attacker_1_hate > maxHate) {
+            maxHate = attacker_1_hate;
+            c2 = attacker_1;
+        }
+        if (attacker_2_hate > maxHate) {
+            maxHate = attacker_2_hate;
+            c2 = attacker_2;
+        }
+        
+        final double distance_c2 = npc.calculateDistance3D(c2);
+        final double direction_c2 = npc.calculateDirectionTo(c2);
+        SkillHolder skillToCast = null;
+        boolean castOnTarget = false;
+        
+        // Different skills based on HP percentage
+        if (npc.getCurrentHp() < (npc.getMaxHp() * 0.25)) {
+            // Below 25% HP - very aggressive
+            if (getRandom(100) < 30) {
+                castOnTarget = true;
+                skillToCast = ANTH_MOUTH;
+            } else if ((getRandom(100) < 80) && isInTailRange(distance_c2, direction_c2)) {
+                skillToCast = ANTH_TAIL;
+            } else if (getRandom(100) < 10) {
+                castOnTarget = true;
+                skillToCast = ANTH_METEOR;
+            }
+        } else if (npc.getCurrentHp() < (npc.getMaxHp() * 0.75)) {
+            // Medium HP - moderate aggression
+            if ((getRandom(100) < 80) && isInTailRange(distance_c2, direction_c2)) {
+                skillToCast = ANTH_TAIL;
+            } else if (getRandom(100) < 5) {
+                castOnTarget = true;
+                skillToCast = ANTH_METEOR;
+            }
+        }
+        
+        // Cast selected skill
+        if ((skillToCast != null) && npc.checkDoCastConditions(skillToCast.getSkill())) {
+            if (castOnTarget) {
+                addSkillCastDesire(npc, c2, skillToCast.getSkill(), 100);
+            } else {
+                npc.getAI().setIntention(Intention.CAST, skillToCast.getSkill(), npc);
+            }
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+### Threat Management
+
+Antharas tracks top 3 attackers:
+
+```java ai/bosses/Antharas/Antharas.java (lines 757-799)
+private void refreshAiParams(Player attacker, int damage) {
+    if ((attacker_1 != null) && (attacker == attacker_1)) {
+        if (attacker_1_hate < (damage + 1000)) {
+            attacker_1_hate = damage + getRandom(3000);
+        }
+    } else if ((attacker_2 != null) && (attacker == attacker_2)) {
+        if (attacker_2_hate < (damage + 1000)) {
+            attacker_2_hate = damage + getRandom(3000);
+        }
+    } else if ((attacker_3 != null) && (attacker == attacker_3)) {
+        if (attacker_3_hate < (damage + 1000)) {
+            attacker_3_hate = damage + getRandom(3000);
+        }
+    } else {
+        // New attacker - replace lowest hate
+        final int minHate = MathUtil.min(attacker_1_hate, attacker_2_hate, attacker_3_hate);
+        if (attacker_1_hate == minHate) {
+            attacker_1_hate = damage + getRandom(3000);
+            attacker_1 = attacker;
+        }
+    }
+}
+```
+
+## Simpler NPC AI Examples
+
+### Teleporter NPC
+
+```java
+package ai.others.SimpleTeleporter;
+
+import org.l2jmobius.gameserver.model.Location;
+import org.l2jmobius.gameserver.model.actor.Npc;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.script.Script;
+
+public class SimpleTeleporter extends Script {
+    private static final int TELEPORTER = 30001;
+    
+    private static final Location GIRAN = new Location(83400, 147943, -3404);
+    private static final Location ADEN = new Location(146331, 25762, -2018);
+    
+    private SimpleTeleporter() {
+        addStartNpc(TELEPORTER);
+        addTalkId(TELEPORTER);
+        addFirstTalkId(TELEPORTER);
+    }
+    
+    @Override
+    public String onAdvEvent(String event, Npc npc, Player player) {
+        switch (event) {
+            case "giran":
+                player.teleToLocation(GIRAN);
+                break;
+            case "aden":
+                player.teleToLocation(ADEN);
+                break;
+        }
+        return null;
+    }
+    
+    @Override
+    public String onFirstTalk(Npc npc, Player player) {
+        return "teleporter.html";
+    }
+    
+    public static void main(String[] args) {
+        new SimpleTeleporter();
+    }
+}
+```
+
+### Buffer NPC
+
+```java
+package ai.others.SimpleBuffer;
+
+import org.l2jmobius.gameserver.model.actor.Npc;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.script.Script;
+import org.l2jmobius.gameserver.model.skill.SkillCaster;
+import org.l2jmobius.gameserver.data.xml.SkillData;
+
+public class SimpleBuffer extends Script {
+    private static final int BUFFER_NPC = 30002;
+    
+    // Buff skill IDs
+    private static final int MIGHT = 1068; // Might Lv3
+    private static final int SHIELD = 1040; // Shield Lv3
+    private static final int BLESS_BODY = 1045; // Blessed Body Lv6
+    
+    private SimpleBuffer() {
+        addStartNpc(BUFFER_NPC);
+        addTalkId(BUFFER_NPC);
+        addFirstTalkId(BUFFER_NPC);
+    }
+    
+    @Override
+    public String onAdvEvent(String event, Npc npc, Player player) {
+        switch (event) {
+            case "might":
+                npc.setTarget(player);
+                npc.doCast(SkillData.getInstance().getSkill(MIGHT, 3));
+                break;
+            case "shield":
+                npc.setTarget(player);
+                npc.doCast(SkillData.getInstance().getSkill(SHIELD, 3));
+                break;
+            case "fullbuff":
+                npc.setTarget(player);
+                npc.doCast(SkillData.getInstance().getSkill(MIGHT, 3));
+                npc.doCast(SkillData.getInstance().getSkill(SHIELD, 3));
+                npc.doCast(SkillData.getInstance().getSkill(BLESS_BODY, 6));
+                break;
+        }
+        return "buffer.html";
+    }
+    
+    @Override
+    public String onFirstTalk(Npc npc, Player player) {
+        return "buffer.html";
+    }
+    
+    public static void main(String[] args) {
+        new SimpleBuffer();
+    }
+}
+```
+
+### Aggressive Monster AI
+
+```java
+package ai.others.AggressiveMob;
+
+import org.l2jmobius.gameserver.ai.Intention;
+import org.l2jmobius.gameserver.model.actor.Npc;
+import org.l2jmobius.gameserver.model.actor.Player;
+import org.l2jmobius.gameserver.model.script.Script;
+
+public class AggressiveMob extends Script {
+    private static final int AGGRESSIVE_MOB = 20001;
+    private static final int AGGRO_RANGE = 500;
+    
+    private AggressiveMob() {
+        addSpawnId(AGGRESSIVE_MOB);
+        addAggroRangeEnterId(AGGRESSIVE_MOB);
+        addKillId(AGGRESSIVE_MOB);
+    }
+    
+    @Override
+    public void onSpawn(Npc npc) {
+        // Disable random walk
+        npc.setRandomWalking(false);
+        
+        // Set custom parameters
+        npc.setRunning();
+    }
+    
+    @Override
+    public void onAggroRangeEnter(Npc npc, Player player, boolean isSummon) {
+        if (!player.isGM()) {
+            npc.addDamageHate(player, 0, 999);
+            npc.getAI().setIntention(Intention.ATTACK, player);
+        }
+    }
+    
+    @Override
+    public void onKill(Npc npc, Player killer, boolean isSummon) {
+        // Special drop for party leader
+        if (killer.isInParty() && killer.getParty().isLeader(killer)) {
+            if (getRandom(100) < 50) {
+                npc.dropItem(killer, 57, 1000); // 1000 adena
+            }
+        }
+    }
+    
+    public static void main(String[] args) {
+        new AggressiveMob();
+    }
+}
+```
+
+## AI Event Methods
+
+### Core Events
+
+| Method | When Triggered |
+|--------|---------------|
+| `onSpawn(Npc npc)` | NPC spawns in world |
+| `onAttack(Npc npc, Player attacker, int damage, boolean isSummon, Skill skill)` | NPC is attacked |
+| `onKill(Npc npc, Player killer, boolean isSummon)` | NPC is killed |
+| `onFirstTalk(Npc npc, Player player)` | First interaction with NPC |
+| `onAdvEvent(String event, Npc npc, Player player)` | Custom event triggered |
+
+### Advanced Events
+
+| Method | When Triggered |
+|--------|---------------|
+| `onAggroRangeEnter(Npc npc, Player player, boolean isSummon)` | Player enters aggro range |
+| `onSpellFinished(Npc npc, Player player, Skill skill)` | NPC finishes casting |
+| `onSeeCreature(Npc npc, Creature creature, boolean isSummon)` | NPC sees a creature |
+| `onMoveFinished(Npc npc)` | NPC reaches destination |
+
+## Timers and Scheduling
+
+### Quest Timers
+
+```java
+// Start a timer
+startQuestTimer("SKILL_CAST", 5000, npc, player);
+
+// Repeating timer
+startQuestTimer("HEAL_CHECK", 10000, npc, null, true);
+
+// Cancel timer
+cancelQuestTimer("SKILL_CAST", npc, player);
+
+// Handle timer event
+@Override
+public String onAdvEvent(String event, Npc npc, Player player) {
+    if (event.equals("SKILL_CAST")) {
+        npc.doCast(someSkill);
+    }
+    return null;
+}
+```
+
+## Skill Casting
+
+### Basic Casting
+
+```java
+import org.l2jmobius.gameserver.data.xml.SkillData;
+import org.l2jmobius.gameserver.model.skill.Skill;
+
+// Get skill
+Skill heal = SkillData.getInstance().getSkill(1002, 1);
+
+// Cast on target
+npc.setTarget(player);
+npc.doCast(heal);
+
+// Cast on self
+npc.setTarget(npc);
+npc.doCast(heal);
+```
+
+### AI-Controlled Casting
+
+```java ai/bosses/Antharas/Antharas.java (lines 1025-1035)
+if ((skillToCast != null) && npc.checkDoCastConditions(skillToCast.getSkill())) {
+    if (castOnTarget) {
+        addSkillCastDesire(npc, c2, skillToCast.getSkill(), 100);
+    } else {
+        npc.getAI().setIntention(Intention.CAST, skillToCast.getSkill(), npc);
+    }
+}
+```
+
+## Movement and Positioning
+
+```java
+import org.l2jmobius.gameserver.ai.Intention;
+import org.l2jmobius.gameserver.model.Location;
+
+// Move to location
+Location destination = new Location(100000, 100000, -3000);
+npc.getAI().setIntention(Intention.MOVE_TO, destination);
+
+// Teleport instantly
+npc.teleToLocation(destination);
+
+// Enable/disable random walking
+npc.setRandomWalking(true);
+
+// Calculate distance
+double distance = npc.calculateDistance3D(player);
+
+// Calculate direction (degrees)
+double direction = npc.calculateDirectionTo(player);
+```
+
+## Zone Interaction
+
+```java
+import org.l2jmobius.gameserver.managers.ZoneManager;
+import org.l2jmobius.gameserver.model.zone.type.NoRestartZone;
+
+private static final NoRestartZone BOSS_ZONE = 
+    ZoneManager.getInstance().getZoneById(70050, NoRestartZone.class);
+
+// Broadcast to zone
+BOSS_ZONE.broadcastPacket(new PlaySound("BS02_A"));
+
+// Get creatures in zone
+for (Creature creature : BOSS_ZONE.getCharactersInside()) {
+    if (creature.isPlayer()) {
+        creature.asPlayer().sendMessage("Boss has spawned!");
+    }
+}
+
+// Check if player in zone
+if (BOSS_ZONE.isCharacterInZone(player)) {
+    // Player is inside
+}
+```
+
+## Best Practices
+
+<AccordionGroup>
+  <Accordion title="State Management">
+    Use instance variables carefully - they persist across all NPC instances of the same script.
+    
+    ```java
+    // BAD - shared across all instances
+    private int currentPhase = 1;
+    
+    // GOOD - use NPC variables or timers
+    npc.getVariables().set("phase", 1);
+    ```
+  </Accordion>
+  
+  <Accordion title="Resource Cleanup">
+    Implement `unload()` to clean up timers and spawns:
+    
+    ```java
+    @Override
+    public void unload(boolean removeFromList) {
+        if (_boss != null) {
+            _boss.deleteMe();
+            _boss = null;
+        }
+        super.unload(removeFromList);
+    }
+    ```
+  </Accordion>
+  
+  <Accordion title="Performance">
+    Avoid expensive operations in frequently-called methods like `onAttack()`.
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+<Card title="Handlers" icon="terminal" href="/scripting/handlers">
+  Learn about handler system for items, commands, and effects
+</Card>

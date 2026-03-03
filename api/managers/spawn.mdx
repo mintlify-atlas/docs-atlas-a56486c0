@@ -1,0 +1,682 @@
+---
+title: 'Spawn Management'
+description: 'NPC spawn system and spawn management API reference'
+---
+
+## Overview
+
+The spawn management system handles NPC spawning, respawning, territory-based spawning, and spawn data persistence in L2J Mobius Chronicle 4.
+
+**Key Classes:**
+- `org.l2jmobius.gameserver.model.Spawn` - Individual spawn instance
+- `org.l2jmobius.gameserver.data.xml.SpawnData` - XML spawn loader (singleton)
+- `org.l2jmobius.gameserver.data.SpawnTable` - Central spawn registry (singleton)
+- `org.l2jmobius.gameserver.managers.DayNightSpawnManager` - Day/night spawn control
+
+## Spawn Class
+
+Location: `org.l2jmobius.gameserver.model.Spawn`
+
+Represents a single NPC spawn point with respawn mechanics.
+
+### Constructor
+
+```java
+// By template
+public Spawn(NpcTemplate template) throws ClassNotFoundException, NoSuchMethodException
+
+// By NPC ID
+public Spawn(int npcId) throws ClassNotFoundException, NoSuchMethodException
+```
+
+**Example:**
+```java
+Spawn spawn = new Spawn(20001); // Orc Fighter
+spawn.setXYZ(-84080, 243298, -3728);
+spawn.setAmount(5);
+spawn.setRespawnDelay(60); // 60 seconds
+spawn.init();
+```
+
+### Core Properties
+
+<ResponseField name="_maximumCount" type="int">
+  Maximum number of NPCs this spawn manages.
+  
+  ```java
+  public void setAmount(int amount)
+  public int getAmount()
+  ```
+</ResponseField>
+
+<ResponseField name="_currentCount" type="int">
+  Current number of spawned NPCs (read-only).
+</ResponseField>
+
+<ResponseField name="_respawnMinDelay" type="int">
+  Minimum respawn delay in milliseconds.
+  
+  ```java
+  public int getRespawnMinDelay()
+  ```
+</ResponseField>
+
+<ResponseField name="_respawnMaxDelay" type="int">
+  Maximum respawn delay in milliseconds.
+  
+  ```java
+  public int getRespawnMaxDelay()
+  ```
+</ResponseField>
+
+<ResponseField name="_doRespawn" type="boolean">
+  Whether automatic respawning is enabled.
+  
+  ```java
+  public boolean isRespawnEnabled()
+  public void stopRespawn()
+  public void startRespawn()
+  ```
+</ResponseField>
+
+### Key Methods
+
+#### Initialization
+
+<ParamField path="init" type="int">
+  Initializes the spawn and creates all NPCs.
+  
+  ```java
+  public int init()
+  ```
+  
+  **Process:**
+  1. Spawns NPCs until `_currentCount` reaches `_maximumCount`
+  2. Sets `_doRespawn` based on respawn delay (enabled if > 0)
+  
+  **Returns:** Number of NPCs spawned
+</ParamField>
+
+<ParamField path="doSpawn" type="Npc">
+  Spawns a single NPC instance.
+  
+  ```java
+  public Npc doSpawn()
+  public Npc doSpawn(boolean isSummonSpawn)
+  ```
+  
+  **Parameters:**
+  - `isSummonSpawn` - If true, shows summon animation
+  
+  **Returns:** Spawned Npc instance or `null` on failure
+  
+  **Process:**
+  1. Creates NPC from template using reflection
+  2. Sets instance ID
+  3. Calculates spawn position (random if territory-based)
+  4. Corrects Z coordinate using GeoEngine
+  5. Sets HP/MP to maximum
+  6. Sets random or fixed heading
+  7. Spawns NPC into world
+  8. Increments `_currentCount`
+</ParamField>
+
+#### Respawn Control
+
+<ParamField path="decreaseCount" type="void">
+  Handles NPC death and schedules respawn.
+  
+  ```java
+  public void decreaseCount(Npc oldNpc)
+  ```
+  
+  **Process:**
+  1. Decrements `_currentCount`
+  2. Removes NPC from spawn list
+  3. If respawn enabled and under max count:
+     - Increments `_scheduledCount`
+     - Schedules respawn via `RespawnTaskManager`
+     - Uses random delay if `_respawnMaxDelay` differs from `_respawnMinDelay`
+</ParamField>
+
+<ParamField path="respawnNpc" type="void">
+  Immediately respawns an NPC.
+  
+  ```java
+  public void respawnNpc(Npc oldNpc)
+  ```
+  
+  Reinitializes the NPC at spawn location (used by RespawnTaskManager).
+</ParamField>
+
+#### Location Management
+
+<ParamField path="setXYZ" type="void">
+  Sets spawn coordinates (inherited from Location).
+  
+  ```java
+  public void setXYZ(int x, int y, int z)
+  ```
+</ParamField>
+
+<ParamField path="setLocation" type="void">
+  Sets spawn location from Location object.
+  
+  ```java
+  public void setLocation(Location loc)
+  ```
+</ParamField>
+
+<ParamField path="setSpawnTerritory" type="void">
+  Sets spawn territory for random position spawning.
+  
+  ```java
+  public void setSpawnTerritory(NpcSpawnTerritory territory)
+  ```
+  
+  When territory is set, NPCs spawn at random positions within the territory boundaries.
+</ParamField>
+
+<ParamField path="isTerritoryBased" type="boolean">
+  Checks if spawn uses territory-based positioning.
+  
+  ```java
+  public boolean isTerritoryBased()
+  ```
+  
+  **Returns:** `true` if territory is set and X/Y coordinates are 0
+</ParamField>
+
+#### Respawn Timing
+
+<ParamField path="setRespawnDelay" type="void">
+  Sets respawn delay with optional randomization.
+  
+  ```java
+  public void setRespawnDelay(int delay)
+  public void setRespawnDelay(int delay, int randomInterval)
+  ```
+  
+  **Parameters:**
+  - `delay` - Base respawn delay in seconds
+  - `randomInterval` - Random variance in seconds (±)
+  
+  **Example:**
+  ```java
+  spawn.setRespawnDelay(60, 20);
+  // Respawns between 40-80 seconds
+  ```
+  
+  Converted to milliseconds internally:
+  - `_respawnMinDelay = (delay - randomInterval) * 1000`
+  - `_respawnMaxDelay = (delay + randomInterval) * 1000`
+</ParamField>
+
+<ParamField path="getRespawnDelay" type="int">
+  Gets average respawn delay.
+  
+  ```java
+  public int getRespawnDelay()
+  ```
+  
+  **Returns:** Average of min and max delays in milliseconds
+</ParamField>
+
+<ParamField path="hasRespawnRandom" type="boolean">
+  Checks if respawn has random component.
+  
+  ```java
+  public boolean hasRespawnRandom()
+  ```
+</ParamField>
+
+#### Other Properties
+
+<ParamField path="setChaseRange" type="void">
+  Sets maximum chase distance for monsters.
+  
+  ```java
+  public void setChaseRange(int chaseRange)
+  public int getChaseRange()
+  ```
+  
+  NPCs won't pursue targets beyond this range from spawn point.
+</ParamField>
+
+<ParamField path="setRandomWalking" type="void">
+  Enables/disables random walking.
+  
+  ```java
+  public void setRandomWalking(boolean value)
+  public boolean getRandomWalking()
+  ```
+</ParamField>
+
+<ParamField path="setName" type="void">
+  Sets spawn identifier name.
+  
+  ```java
+  public void setName(String name)
+  public String getName()
+  ```
+</ParamField>
+
+### Spawned NPC Tracking
+
+<ParamField path="getSpawnedNpcs" type="Deque<Npc>">
+  Gets all NPCs currently spawned by this spawn.
+  
+  ```java
+  public Deque<Npc> getSpawnedNpcs()
+  ```
+  
+  **Returns:** Thread-safe deque of spawned NPCs
+</ParamField>
+
+<ParamField path="getLastSpawn" type="Npc">
+  Gets the most recently spawned NPC.
+  
+  ```java
+  public Npc getLastSpawn()
+  ```
+</ParamField>
+
+## SpawnData
+
+Location: `org.l2jmobius.gameserver.data.xml.SpawnData`
+
+Loads and manages NPC spawns from XML files.
+
+### Singleton Pattern
+
+```java
+SpawnData spawnData = SpawnData.getInstance();
+```
+
+### XML Spawn Format
+
+**File Location:** `data/spawns/`
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<list enabled="true">
+    <spawn name="town_gludio">
+        <!-- Fixed position spawn -->
+        <npc id="30001" x="-80826" y="149775" z="-3043" 
+             heading="0" respawnDelay="60" />
+        
+        <!-- Multiple count spawn -->
+        <npc id="20001" count="5" x="-84080" y="243298" z="-3728"
+             respawnDelay="300" respawnRandom="60" />
+        
+        <!-- Territory-based spawn -->
+        <territory shape="NPoly" minZ="-4000" maxZ="-3000">
+            <node x="-85000" y="240000" />
+            <node x="-83000" y="240000" />
+            <node x="-83000" y="245000" />
+            <node x="-85000" y="245000" />
+        </territory>
+        
+        <npc id="20002" count="10" zone="town_gludio" 
+             respawnDelay="180" />
+        
+        <!-- Day/night spawn -->
+        <npc id="20010" x="-80000" y="150000" z="-3000"
+             periodOfDay="night" respawnDelay="60" />
+        
+        <!-- Custom AI parameters -->
+        <AIData>
+            <disableRandomWalk>true</disableRandomWalk>
+            <disableRandomAnimation>true</disableRandomAnimation>
+        </AIData>
+        <npc id="30100" x="-80000" y="150000" z="-3000" />
+    </spawn>
+</list>
+```
+
+### Key Methods
+
+<ParamField path="addNewSpawn" type="void">
+  Adds a new spawn and persists to XML.
+  
+  ```java
+  public synchronized void addNewSpawn(Spawn spawn)
+  ```
+  
+  **Process:**
+  1. Adds to SpawnTable
+  2. Determines XML file based on world tile coordinates
+  3. Appends spawn entry to existing file or creates new one
+  4. Creates directory `data/spawns/Others/` if needed
+</ParamField>
+
+<ParamField path="deleteSpawn" type="void">
+  Removes spawn from table and XML file.
+  
+  ```java
+  public synchronized void deleteSpawn(Spawn spawn)
+  ```
+  
+  **Process:**
+  1. Removes from SpawnTable
+  2. Locates XML file
+  3. Removes matching spawn entry
+  4. Deletes file if it becomes empty
+</ParamField>
+
+<ParamField path="getSpawnFile" type="String">
+  Gets the XML file path for a spawn template ID.
+  
+  ```java
+  public String getSpawnFile(int templateId)
+  ```
+</ParamField>
+
+### Territory Shapes
+
+**Supported Shapes:**
+
+1. **NPoly** - N-sided polygon (3+ vertices)
+   ```xml
+   <territory shape="NPoly" minZ="-4000" maxZ="-3000">
+       <node x="-85000" y="240000" />
+       <node x="-83000" y="240000" />
+       <node x="-83000" y="245000" />
+   </territory>
+   ```
+
+2. **Cuboid** - Rectangular box (2 vertices)
+   ```xml
+   <territory shape="Cuboid" minZ="-4000" maxZ="-3000">
+       <node x="-85000" y="240000" />
+       <node x="-83000" y="245000" />
+   </territory>
+   ```
+
+3. **Cylinder** - Circular area (1 center point + radius)
+   ```xml
+   <territory shape="Cylinder" minZ="-4000" maxZ="-3000" rad="1000">
+       <node x="-84000" y="242500" />
+   </territory>
+   ```
+
+### Banned Territories
+
+Exclude areas within spawn territories:
+
+```xml
+<spawn name="hunting_ground" zone="forest_area">
+    <territory shape="NPoly" minZ="-4000" maxZ="-3000">
+        <!-- Main spawn area -->
+        <node x="-90000" y="240000" />
+        <node x="-80000" y="240000" />
+        <node x="-80000" y="250000" />
+        <node x="-90000" y="250000" />
+    </territory>
+    
+    <banned_territory shape="Cylinder" minZ="-4000" maxZ="-3000" rad="500">
+        <!-- Don't spawn near this point -->
+        <node x="-85000" y="245000" />
+    </banned_territory>
+    
+    <npc id="20001" count="20" zone="forest_area" />
+</spawn>
+```
+
+## SpawnTable
+
+Location: `org.l2jmobius.gameserver.data.SpawnTable`
+
+Central registry for all active spawns.
+
+### Singleton Pattern
+
+```java
+SpawnTable spawnTable = SpawnTable.getInstance();
+```
+
+### Key Methods
+
+<ParamField path="getSpawnTable" type="Map<Integer, Set<Spawn>>">
+  Gets complete spawn table.
+  
+  ```java
+  public Map<Integer, Set<Spawn>> getSpawnTable()
+  ```
+  
+  **Returns:** Map of NPC ID → Set of spawns
+</ParamField>
+
+<ParamField path="getSpawns" type="Set<Spawn>">
+  Gets all spawns for an NPC ID.
+  
+  ```java
+  public Set<Spawn> getSpawns(int npcId)
+  ```
+  
+  **Returns:** Set of spawns or empty set if none
+</ParamField>
+
+<ParamField path="getSpawnCount" type="int">
+  Counts spawns for an NPC.
+  
+  ```java
+  public int getSpawnCount(int npcId)
+  ```
+</ParamField>
+
+<ParamField path="getAnySpawn" type="Spawn">
+  Gets any spawn for an NPC ID.
+  
+  ```java
+  public Spawn getAnySpawn(int npcId)
+  ```
+  
+  **Returns:** First spawn found or `null`
+</ParamField>
+
+<ParamField path="addSpawn" type="void">
+  Registers a spawn.
+  
+  ```java
+  public void addSpawn(Spawn spawn)
+  ```
+  
+  Creates new spawn set if needed (thread-safe).
+</ParamField>
+
+<ParamField path="removeSpawn" type="void">
+  Unregisters a spawn.
+  
+  ```java
+  public void removeSpawn(Spawn spawn)
+  ```
+  
+  Removes spawn set if it becomes empty.
+</ParamField>
+
+## Usage Examples
+
+### Create and Initialize Spawn
+
+```java
+try {
+    // Create spawn for Orc Fighter (20001)
+    Spawn spawn = new Spawn(20001);
+    
+    // Set location
+    spawn.setXYZ(-84080, 243298, -3728);
+    spawn.setHeading(0);
+    
+    // Configure spawn behavior
+    spawn.setAmount(5); // Spawn 5 NPCs
+    spawn.setRespawnDelay(300, 60); // 240-360 seconds
+    spawn.setRandomWalking(true);
+    spawn.setChaseRange(1000);
+    
+    // Initialize and spawn NPCs
+    int spawned = spawn.init();
+    System.out.println("Spawned " + spawned + " NPCs");
+    
+} catch (Exception e) {
+    e.printStackTrace();
+}
+```
+
+### Territory-Based Spawning
+
+```java
+try {
+    Spawn spawn = new Spawn(20002);
+    
+    // Create spawn territory
+    NpcSpawnTerritory territory = ZoneManager.getInstance()
+        .getSpawnTerritory("hunting_ground_1");
+    
+    spawn.setSpawnTerritory(territory);
+    spawn.setAmount(10);
+    spawn.setRespawnDelay(180);
+    
+    spawn.init(); // Spawns at random positions in territory
+    
+} catch (Exception e) {
+    e.printStackTrace();
+}
+```
+
+### Day/Night Spawns
+
+```java
+try {
+    Spawn nightSpawn = new Spawn(20010); // Night monster
+    nightSpawn.setXYZ(-80000, 150000, -3000);
+    nightSpawn.setRespawnDelay(60);
+    
+    // Register as night creature (don't init directly)
+    DayNightSpawnManager.getInstance().addNightCreature(nightSpawn);
+    
+    // Create day spawn
+    Spawn daySpawn = new Spawn(20011); // Day monster
+    daySpawn.setXYZ(-80000, 150000, -3000);
+    daySpawn.setRespawnDelay(60);
+    
+    DayNightSpawnManager.getInstance().addDayCreature(daySpawn);
+    
+} catch (Exception e) {
+    e.printStackTrace();
+}
+```
+
+### Query Spawns from Table
+
+```java
+SpawnTable spawnTable = SpawnTable.getInstance();
+
+// Get all Orc spawns
+int orcId = 20001;
+Set<Spawn> orcSpawns = spawnTable.getSpawns(orcId);
+
+System.out.println("Found " + orcSpawns.size() + " Orc spawn points");
+
+for (Spawn spawn : orcSpawns) {
+    System.out.println("  Location: " + spawn.getX() + "," + spawn.getY() + "," + spawn.getZ());
+    System.out.println("  Amount: " + spawn.getAmount());
+    System.out.println("  Respawn: " + spawn.getRespawnDelay() / 1000 + "s");
+}
+```
+
+### Dynamic Spawn Creation
+
+```java
+// Create spawn at player location
+Player player = ...;
+
+try {
+    Spawn spawn = new Spawn(30001); // Guard
+    spawn.setXYZ(player.getX(), player.getY(), player.getZ());
+    spawn.setHeading(player.getHeading());
+    spawn.setAmount(1);
+    spawn.setRespawnDelay(0); // No respawn
+    
+    Npc npc = spawn.doSpawn();
+    if (npc != null) {
+        player.sendMessage("Spawned: " + npc.getName());
+        
+        // Add to spawn table and persist
+        SpawnData.getInstance().addNewSpawn(spawn);
+    }
+    
+} catch (Exception e) {
+    player.sendMessage("Failed to spawn NPC");
+}
+```
+
+### Delete Spawn
+
+```java
+Spawn spawn = ...; // Get spawn instance
+
+// Despawn all NPCs
+for (Npc npc : spawn.getSpawnedNpcs()) {
+    npc.deleteMe();
+}
+
+// Remove from table and XML
+SpawnData.getInstance().deleteSpawn(spawn);
+```
+
+### Stop/Start Respawning
+
+```java
+Spawn spawn = ...;
+
+// Temporarily disable respawn
+spawn.stopRespawn();
+
+// Kill remaining NPCs (won't respawn)
+for (Npc npc : spawn.getSpawnedNpcs()) {
+    npc.doDie(null);
+}
+
+// Re-enable respawn later
+spawn.startRespawn();
+spawn.init(); // Spawn new NPCs
+```
+
+## Random Spawn System
+
+If enabled in configuration (`RandomSpawnsConfig.ENABLE_RANDOM_MONSTER_SPAWNS`):
+
+```java
+// Monsters spawn with random offset from defined position
+int randX = spawnX + Rnd.get(MIN_RANGE, MAX_RANGE);
+int randY = spawnY + Rnd.get(MIN_RANGE, MAX_RANGE);
+
+// Validated with GeoEngine
+if (GeoEngine.canMoveToTarget(...) && GeoEngine.canSeeTarget(...)) {
+    // Use random position
+}
+```
+
+**Requirements:**
+- Heading must not be -1 (fixed heading disables random)
+- Must be monster (not NPC/quest monster)
+- Not in water zone
+- Not raid/minion/flying
+- Not in instance
+- Not in exclusion list
+
+## Related Systems
+
+- **RespawnTaskManager** - Schedules NPC respawns
+- **DayNightSpawnManager** - Manages day/night creature spawning
+- **RaidBossSpawnManager** - Handles raid boss spawns
+- **GrandBossManager** - Manages grand boss spawns
+- **NpcPersonalAIData** - Custom AI parameters per spawn
+- **ZoneManager** - Spawn territory management
+
+## Source Reference
+
+- Source: `java/org/l2jmobius/gameserver/model/Spawn.java:50`
+- Source: `java/org/l2jmobius/gameserver/data/xml/SpawnData.java:62`
+- Source: `java/org/l2jmobius/gameserver/data/SpawnTable.java:33`

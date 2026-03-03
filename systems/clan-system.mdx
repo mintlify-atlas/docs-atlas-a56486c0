@@ -1,0 +1,509 @@
+---
+title: 'Clan System'
+description: 'Clan management, leveling, privileges, and alliance mechanics'
+icon: 'users-between-lines'
+---
+
+## Overview
+
+The Clan System enables players to form persistent social and competitive organizations with shared resources, hierarchical privileges, and territorial ambitions. Clans can own castles, participate in sieges, form alliances, and compete in end-game content.
+
+<Note>
+  Clans are fundamental to L2J Mobius's end-game systems. Castle ownership, large-scale PvP, and many economic features require clan membership.
+</Note>
+
+## Clan Creation
+
+### Requirements
+
+- Character level: **10+** (default)
+- Creation cost: Adena (configurable)
+- Unique clan name (16 characters max)
+- Not currently in a clan
+
+### Initial Properties
+
+```java
+public Clan(int clanId, String clanName) {
+    _clanId = clanId;
+    _name = clanName;
+    initializePrivs();
+}
+```
+
+**Starting Stats**:
+- Clan Level: **0**
+- Members: 1 (founder becomes leader)
+- Warehouse: Empty clan warehouse access
+- Reputation: 0
+
+**Source**: `Clan.java:147-152`
+
+## Clan Levels
+
+Clans progress through 11 levels (0-10), each unlocking new features:
+
+| Level | Max Members | Special Abilities | Requirements |
+|-------|-------------|-------------------|---------------|
+| 0 | 10 | Basic clan functions | Default |
+| 1 | 15 | Clan warehouse | Reputation |
+| 2 | 20 | Clan crest (16x12) | Reputation |
+| 3 | 30 | Ally creation | Reputation |
+| 4 | 40 | Siege participation | Reputation |
+| 5 | 40 | Large crest (24x24) | Reputation + Castle |
+| 6 | 50 | Royal Guard subunit | Reputation |
+| 7 | 50 | Order of Knights | Reputation |
+| 8 | 50 | Elite squad | Reputation + Castle |
+| 9 | 60 | Advanced privileges | Reputation |
+| 10 | 80 | Maximum expansion | Reputation |
+
+<Warning>
+  Achieving level 5+ typically requires castle ownership. Plan territorial conquests accordingly.
+</Warning>
+
+### Leveling Requirements
+
+Clan level increases require:
+- Sufficient **Clan Reputation Points**
+- Completion of clan quests (server-dependent)
+- Minimum member count
+- Castle ownership (levels 5, 8)
+
+## Clan Privileges
+
+### Privilege System
+
+Clan leaders assign **privileges** to ranks:
+
+```java
+private final Map<Integer, RankPrivs> _privs = new ConcurrentHashMap<>();
+```
+
+**Source**: `Clan.java:119`
+
+### Available Privileges
+
+<AccordionGroup>
+  <Accordion title="CL_JOIN_CLAN" icon="user-plus">
+    Permission to invite new members to the clan.
+  </Accordion>
+
+  <Accordion title="CL_GIVE_TITLE" icon="tag">
+    Ability to set/modify member titles.
+  </Accordion>
+
+  <Accordion title="CL_VIEW_WAREHOUSE" icon="eye">
+    View clan warehouse contents.
+  </Accordion>
+
+  <Accordion title="CL_MANAGE_WAREHOUSE" icon="warehouse">
+    Deposit/withdraw from clan warehouse.
+  </Accordion>
+
+  <Accordion title="CL_MANAGE_CREST" icon="image">
+    Upload and change clan crests.
+  </Accordion>
+
+  <Accordion title="CL_APPRENTICE" icon="graduation-cap">
+    Manage academy members (apprentice system).
+  </Accordion>
+
+  <Accordion title="CL_REGISTER_CREST" icon="shield">
+    Register clan and alliance crests.
+  </Accordion>
+
+  <Accordion title="CL_WAR" icon="swords">
+    Declare and manage clan wars.
+  </Accordion>
+</AccordionGroup>
+
+### Privilege Management
+
+Leader assigns privileges via rank system:
+
+```java
+public void setLeader(ClanMember leader) {
+    _leader = leader;
+    _members.put(leader.getObjectId(), leader);
+}
+```
+
+**Source**: `Clan.java:189-193`
+
+## Leadership
+
+### Leader Transfer
+
+```java
+public void setNewLeader(ClanMember member) {
+    final Player newLeader = member.getPlayer();
+    final ClanMember exMember = _leader;
+    final Player exLeader = exMember.getPlayer();
+    
+    // Notify to scripts
+    if (EventDispatcher.getInstance().hasListener(EventType.ON_PLAYER_CLAN_LEADER_CHANGE)) {
+        EventDispatcher.getInstance().notifyEventAsync(
+            new OnPlayerClanLeaderChange(exMember, member, this)
+        );
+    }
+    
+    if (exLeader != null) {
+        if (exLeader.isFlying()) {
+            exLeader.dismount();
+        }
+        
+        if (getLevel() >= SiegeManager.getInstance().getSiegeClanMinLevel()) {
+            SiegeManager.getInstance().removeSiegeSkills(exLeader);
+        }
+        
+        exLeader.getClanPrivileges().disableAll();
+        exLeader.broadcastUserInfo();
+    }
+    
+    setLeader(member);
+    updateClanInDB();
+}
+```
+
+**Source**: `Clan.java:195-243`
+
+**Effects**:
+- Previous leader loses all privileges
+- Siege skills removed from old leader
+- New leader gains full privileges
+- Database updated atomically
+- Events triggered for scripts
+
+## Clan Warehouse
+
+Shared item storage for clan members:
+
+```java
+private final ItemContainer _warehouse = new ClanWarehouse(this);
+```
+
+**Source**: `Clan.java:113`
+
+### Warehouse Properties
+
+- **Capacity**: Increases with clan level
+- **Access Control**: Based on privileges
+- **Persistence**: Stored in database
+- **Audit**: Transaction logging available
+
+### Usage Example
+
+```java
+public ItemContainer getWarehouse() {
+    return _warehouse;
+}
+
+public void restore() {
+    _warehouse.restore();
+}
+```
+
+## Clan Wars
+
+Clans can declare formal wars:
+
+```java
+private final Set<Integer> _atWarWith = ConcurrentHashMap.newKeySet();
+private final Set<Integer> _atWarAttackers = ConcurrentHashMap.newKeySet();
+```
+
+**Source**: `Clan.java:114-115`
+
+### War Mechanics
+
+- **Declaration**: Requires privilege permission
+- **Mutual Wars**: Both clans must agree (optional config)
+- **Duration**: Until one clan surrenders or conditions met
+- **Effects**: No karma penalty for kills
+
+### War Statistics
+
+```java
+private final AtomicInteger _siegeKills = new AtomicInteger();
+private final AtomicInteger _siegeDeaths = new AtomicInteger();
+```
+
+**Source**: `Clan.java:127-128`
+
+Tracks performance during wars and sieges.
+
+## Alliances
+
+### Alliance Creation
+
+Requires:
+- Clan level **3+**
+- No existing alliance membership
+- Sufficient reputation
+
+```java
+private String _allyName;
+private int _allyId = 0;
+```
+
+**Source**: `Clan.java:96-97`
+
+### Alliance Management
+
+**Properties**:
+- Maximum members: Variable (config-dependent)
+- Leader clan: Alliance founder
+- Shared ally chat
+- Coordinated siege participation
+
+### Alliance Penalties
+
+Leaving/dissolving alliances incurs penalties:
+
+```java
+public static final int PENALTY_TYPE_CLAN_LEAVED = 1;
+public static final int PENALTY_TYPE_CLAN_DISMISSED = 2;
+public static final int PENALTY_TYPE_DISMISS_CLAN = 3;
+public static final int PENALTY_TYPE_DISSOLVE_ALLY = 4;
+
+private long _allyPenaltyExpiryTime;
+private int _allyPenaltyType;
+```
+
+**Source**: `Clan.java:82-107`
+
+**Penalty Types**:
+- **Leaved**: Clan voluntarily left
+- **Dismissed**: Kicked from alliance
+- **Dismiss Clan**: Leader kicked a member
+- **Dissolve**: Alliance disbanded
+
+**Duration**: Configurable cooldown period preventing immediate rejoining.
+
+## Reputation System
+
+### Earning Reputation
+
+- Castle ownership (weekly)
+- Successful siege defense
+- Winning siege attacks
+- Raid boss kills
+- Olympiad victories
+- Clan quests
+
+### Spending Reputation
+
+- Clan level increases
+- Creating subunits (Academy, Royal Guard, etc.)
+- Special clan skills
+- Alliance creation
+
+### Reputation Penalties
+
+- Losing castle siege
+- Disbanding subunits
+- Alliance penalties
+- Clan dissolution
+
+## Subunits
+
+### Academy
+
+Training ground for low-level members:
+- Separate member count
+- Graduation system
+- Mentor bonuses
+- Reputation cost to establish
+
+### Royal Guard / Order of Knights
+
+Elite subunits unlocked at higher levels:
+- Enhanced privileges
+- Special skills
+- Reputation requirements
+- Limited slots
+
+## Clan Skills
+
+Clan-wide passive bonuses:
+- Earned via reputation expenditure
+- Apply to all online members
+- Stack with individual skills
+- Lost if clan disbands
+
+**Common Skills**:
+- Increased XP/SP gain
+- Enhanced combat stats
+- Economic bonuses
+- Crafting improvements
+
+## Database Schema
+
+### clan_data table
+
+```sql
+CREATE TABLE clan_data (
+    clan_id INT PRIMARY KEY,
+    clan_name VARCHAR(16),
+    clan_level INT,
+    hasCastle INT,
+    blood_alliance_count INT,
+    blood_oath_count INT,
+    ally_id INT,
+    ally_name VARCHAR(16),
+    leader_id INT,
+    crest_id INT,
+    crest_large_id INT,
+    ally_crest_id INT,
+    new_leader_id INT
+);
+```
+
+**Source**: `Clan.java:78`
+
+### Related Tables
+
+- `clan_privs`: Member privileges
+- `clan_skills`: Clan skill data
+- `clan_wars`: Active clan wars
+- `clan_notices`: Clan announcements
+
+## Clan Notices
+
+```java
+private String _notice;
+private boolean _noticeEnabled = false;
+private static final int MAX_NOTICE_LENGTH = 8192;
+```
+
+**Source**: `Clan.java:122-124`
+
+### Notice System
+
+- **Display**: Shown on clan login
+- **Editing**: Leader/privileged members only
+- **Length**: Up to 8192 characters
+- **Formatting**: Basic HTML support
+
+## Blood Oath System
+
+```java
+private int _bloodAllianceCount;
+private int _bloodOathCount;
+```
+
+**Source**: `Clan.java:110-111`
+
+**Blood Oath**:
+- Special alliance bonds
+- Enhanced cooperation benefits
+- Limited count per clan
+- Requires special items
+
+**Blood Alliance**:
+- Permanent alliance markers
+- Reputation bonuses
+- Siege cooperation benefits
+
+## Castle Ownership
+
+```java
+private int _castleId;
+private int _hideoutId;
+private int _hiredGuards;
+```
+
+**Source**: `Clan.java:99-101`
+
+### Castle Benefits
+
+- Tax collection from territory
+- Access to castle NPCs
+- Clan reputation bonuses
+- Mercenary hiring
+- Teleportation privileges
+
+### Hideout Ownership
+
+Clanhalls provide similar but smaller-scale benefits:
+- Safe meeting location
+- Warehouse access
+- Teleportation
+- Auction-based acquisition
+
+## Configuration
+
+### Clan Settings (PlayerConfig)
+
+```java
+// Clan creation
+CLAN_CREATE_LEVEL = 10
+CLAN_CREATE_COST = 40000
+
+// Reputation
+CLAN_REPUTATION_SCORE_PER_RAID_KILL = 50
+CLAN_LEVEL_UP_REPUTATION = {...}
+
+// Penalties
+CLAN_ALLY_PENALTY_DURATION = 86400000  // 24 hours
+CLAN_DISSOLUTION_PENALTY = 604800000   // 7 days
+```
+
+## Events and Hooks
+
+### Event Types
+
+```java
+EventDispatcher.getInstance().notifyEventAsync(
+    new OnPlayerClanJoin(member, this)
+);
+
+EventDispatcher.getInstance().notifyEventAsync(
+    new OnPlayerClanLeft(member, this)
+);
+
+EventDispatcher.getInstance().notifyEventAsync(
+    new OnPlayerClanLvlUp(this)
+);
+```
+
+**Source**: `Clan.java:53-58`
+
+**Available Events**:
+- `OnPlayerClanJoin`: Member joins
+- `OnPlayerClanLeft`: Member leaves
+- `OnPlayerClanLeaderChange`: Leadership transfer
+- `OnPlayerClanLvlUp`: Clan levels up
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="How do I increase clan level?" icon="arrow-up">
+    Accumulate clan reputation through sieges, raids, and quests, then use it to level up. Higher levels require castle ownership.
+  </Accordion>
+
+  <Accordion title="Can I transfer clan leadership?" icon="crown">
+    Yes, the current leader can transfer leadership to another member. The process is irreversible and removes all privileges from the previous leader.
+  </Accordion>
+
+  <Accordion title="What happens if the clan leader quits?" icon="user-xmark">
+    If a new leader is designated (new_leader_id), they automatically become leader. Otherwise, the clan may dissolve after a timeout period.
+  </Accordion>
+
+  <Accordion title="How many members can a clan have?" icon="users">
+    Base capacity increases with clan level, from 10 at level 0 to 80 at level 10. Subunits (Academy, etc.) add additional slots.
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Castle Siege](/systems/castle-siege) - Territory conquest
+- [Olympiad](/systems/olympiad) - Individual PvP for reputation
+- [Raid Bosses](/systems/raid-bosses) - Reputation farming
+
+## References
+
+- `Clan.java` - Core clan implementation
+- `ClanMember.java` - Member data structure
+- `ClanTable.java` - Clan database management
+- `PlayerConfig.java` - Clan configuration settings

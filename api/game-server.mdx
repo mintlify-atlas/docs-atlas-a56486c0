@@ -1,0 +1,303 @@
+---
+title: 'GameServer'
+description: 'Main game server initialization and bootstrap class for L2J Mobius Chronicle 4'
+icon: 'server'
+---
+
+## Overview
+
+The `GameServer` class is the main entry point and initialization engine for the L2J Mobius Chronicle 4 game server. It orchestrates the complete server startup sequence, initializing all subsystems in the correct order.
+
+**Package**: `org.l2jmobius.gameserver`
+
+**Location**: `GameServer.java:158`
+
+## Class Signature
+
+```java
+public class GameServer
+```
+
+## Constructor
+
+### GameServer()
+
+```java
+public GameServer() throws Exception
+```
+
+Initializes the game server and all its subsystems. This constructor performs the complete server bootstrap sequence.
+
+**Throws**: `Exception` - if any critical initialization step fails
+
+## Initialization Sequence
+
+The GameServer follows a carefully orchestrated initialization sequence:
+
+### 1. Logging Configuration
+
+```java
+final File logFolder = new File(".", "log");
+logFolder.mkdir();
+
+try (InputStream is = new FileInputStream(new File("./log.cfg")))
+{
+    LogManager.getLogManager().readConfiguration(is);
+}
+```
+
+Creates the log directory and configures the logging system from `log.cfg`.
+
+### 2. GUI Initialization (Optional)
+
+```java
+InterfaceConfig.load();
+if (InterfaceConfig.ENABLE_GUI)
+{
+    LOGGER.info("GameServer: Running in GUI mode.");
+    new Gui();
+}
+```
+
+If enabled in configuration, starts the graphical user interface for server monitoring.
+
+### 3. Core Systems
+
+Initialized in this order:
+
+<Steps>
+  <Step title="Configuration">
+    Loads all server configuration files via `ConfigLoader.init()`
+  </Step>
+  
+  <Step title="Database">
+    Initializes the HikariCP connection pool via `DatabaseFactory.init()`
+  </Step>
+  
+  <Step title="Thread Pool">
+    Starts the managed thread pool for asynchronous operations
+  </Step>
+  
+  <Step title="Game Time">
+    Starts the in-game time manager early for time-dependent systems
+  </Step>
+  
+  <Step title="ID Manager">
+    Initializes object ID generation and tracking
+  </Step>
+</Steps>
+
+### 4. Scripting Engine
+
+```java
+EventDispatcher.getInstance();
+ScriptEngine.getInstance();
+```
+
+Starts the scripting engine for AI, quests, and custom functionality.
+
+### 5. World Systems
+
+```java
+InstanceManager.getInstance();
+World.getInstance();
+MapRegionManager.getInstance();
+AnnouncementsTable.getInstance();
+GlobalVariablesManager.getInstance();
+```
+
+Initializes the game world, instance management, and map regions.
+
+### 6. Game Data
+
+Loads game data in sections:
+
+- **Skills**: Effect handlers, skill trees, pet skills
+- **Items**: Item templates, enchant data, armor sets, fishing, recipes
+- **Characters**: Classes, templates, experience tables, clans
+- **NPCs**: NPC templates, doors, zones, spawns, teleporters
+- **Olympiad**: Hero system and olympiad competitions
+- **Seven Signs**: Seven Signs event system
+
+### 7. Scripts and Spawns
+
+```java
+LOGGER.info("Loading server scripts...");
+ScriptEngine.getInstance().executeScript(ScriptEngine.MASTER_HANDLER_FILE);
+ScriptEngine.getInstance().executeScriptList();
+
+SpawnData.getInstance();
+DayNightSpawnManager.getInstance().trim().notifyChangeMode();
+```
+
+Executes all server scripts and spawns NPCs/monsters into the world.
+
+### 8. Network Layer
+
+```java
+new ConnectionManager<>(
+    new InetSocketAddress(ServerConfig.PORT_GAME), 
+    GameClient::new, 
+    new GamePacketHandler()
+);
+
+LoginServerThread.getInstance().start();
+```
+
+Starts the network connection manager on the configured game port and establishes connection to the login server.
+
+See: [ConnectionManager](/api/network#connectionmanager), [GameClient](/api/network#gameclient)
+
+### 9. Final Steps
+
+- Restores offline traders and auto-play characters
+- Starts server restart scheduler (if enabled)
+- Starts deadlock detection watchdog (if enabled)
+- Plays system beep to indicate successful startup
+
+## Static Methods
+
+### getStartTime()
+
+```java
+public static long getStartTime()
+```
+
+Returns the server start timestamp in milliseconds.
+
+<ParamField path="returns" type="long">
+  The system time in milliseconds when the server was started
+</ParamField>
+
+### main()
+
+```java
+public static void main(String[] args) throws Exception
+```
+
+The application entry point. Creates a new GameServer instance.
+
+<ParamField path="args" type="String[]">
+  Command line arguments (currently unused)
+</ParamField>
+
+## Instance Methods
+
+### getUsedMemoryMB()
+
+```java
+public long getUsedMemoryMB()
+```
+
+Calculates the current memory usage in megabytes.
+
+<ResponseField name="returns" type="long">
+  The amount of memory currently in use by the JVM in megabytes
+</ResponseField>
+
+**Implementation**:
+```java
+return (Runtime.getRuntime().totalMemory() - Runtime.getRuntime().freeMemory()) / 1048576;
+```
+
+## Usage Example
+
+### Starting the Server
+
+```java
+public static void main(String[] args) throws Exception
+{
+    new GameServer();
+}
+```
+
+The constructor handles all initialization. The server will log its progress through each initialization phase.
+
+### Typical Startup Log Output
+
+```
+--------------------------=[ Database ]
+Database: HikariCP pool initialized successfully.
+--------------------------=[ ThreadPool ]
+--------------------------=[ IdManager ]
+--------------------------=[ Scripting Engine ]
+--------------------------=[ World ]
+--------------------------=[ Skills ]
+--------------------------=[ Items ]
+--------------------------=[ Characters ]
+...
+GameServer: Started, using 512 of 4096 MB total memory.
+GameServer: Maximum number of connected players is 2000.
+GameServer: Server loaded in 47 seconds.
+```
+
+## Configuration Dependencies
+
+The GameServer relies on these configuration classes:
+
+- `InterfaceConfig` - GUI settings
+- `ServerConfig` - Server ports, restart schedules, deadlock detection
+- `GeneralConfig` - General game settings
+- `DatabaseConfig` - Database connection settings (via DatabaseFactory)
+
+See: [DatabaseFactory](/api/database#databasefactory)
+
+## Shutdown Handling
+
+```java
+Runtime.getRuntime().addShutdownHook(Shutdown.getInstance());
+```
+
+Registers a shutdown hook to ensure graceful server shutdown when the JVM exits.
+
+## Performance Monitoring
+
+### Memory Statistics
+
+The server logs memory usage on startup:
+
+```java
+final long totalMem = Runtime.getRuntime().maxMemory() / 1048576;
+LOGGER.info(getClass().getSimpleName() + ": Started, using " + getUsedMemoryMB() + " of " + totalMem + " MB total memory.");
+```
+
+### Deadlock Detection
+
+If enabled, starts a watchdog thread to detect and optionally recover from deadlocks:
+
+```java
+if (ServerConfig.DEADLOCK_WATCHER)
+{
+    final DeadlockWatcher deadlockWatcher = new DeadlockWatcher(
+        Duration.ofSeconds(ServerConfig.DEADLOCK_CHECK_INTERVAL), 
+        () ->
+        {
+            if (ServerConfig.RESTART_ON_DEADLOCK)
+            {
+                Broadcast.toAllOnlinePlayers("Server has stability issues - restarting now.");
+                Shutdown.getInstance().startShutdown(null, 60, true);
+            }
+        }
+    );
+    deadlockWatcher.setDaemon(true);
+    deadlockWatcher.start();
+}
+```
+
+## Notes
+
+<Note>
+  The initialization order is critical. Changing the sequence can cause initialization failures due to dependencies between subsystems.
+</Note>
+
+<Warning>
+  The GameServer constructor blocks until initialization is complete. On a typical system, this takes 30-60 seconds depending on data size and database performance.
+</Warning>
+
+## Related Classes
+
+- [DatabaseFactory](/api/database#databasefactory) - Database connection pooling
+- [ConnectionManager](/api/network#connectionmanager) - Network connection management
+- [GameClient](/api/network#gameclient) - Client connection handling
+- `Shutdown` - Graceful server shutdown
+- `ThreadPool` - Managed thread pool for async operations

@@ -1,0 +1,293 @@
+---
+title: 'Olympiad System'
+description: 'ELO-based competitive PvP ranking system with seasons and rewards'
+icon: 'trophy'
+---
+
+## Overview
+
+The Olympiad is L2J Mobius's competitive PvP system featuring an **ELO-based rating system**, seasonal competitions, and hero selection. Players compete in class-based or non-class battles to earn points, climb divisions, and potentially become Heroes.
+
+<Note>
+  The Olympiad system uses a sophisticated ELO ranking algorithm with anti-feeding protections and soft season resets to maintain competitive integrity.
+</Note>
+
+## ELO Rating System
+
+### Formula
+
+The ELO system updates ratings after each match using the standard formula:
+
+```
+ELO_new = ELO_current + K × (ActualResult - ExpectedResult)
+```
+
+Where:
+- **K Factor**: Volatility constant (default: `32`)
+- **ActualResult**: `1.0` for win, `0.0` for loss, `0.5` for draw
+- **ExpectedResult**: Calculated as:
+
+```java
+E_A = 1 / (1 + 10^((ELO_B - ELO_A) / 400))
+```
+
+**Source**: `Olympiad.java:14-21` (from ELO_ANALYSIS.md)
+
+### Division System
+
+Players are ranked into 5 divisions based on their ELO rating:
+
+| Division | ELO Range | Color |
+|----------|-----------|-------|
+| **Bronze** | < 1100 | Gray (`0x808080`) |
+| **Silver** | 1100-1299 | White (`0xFFFFFF`) |
+| **Gold** | 1300-1499 | Yellow (`0xFFFF00`) |
+| **Platinum** | 1500-1799 | Cyan (`0x00FFFF`) |
+| **Diamond** | 1800+ | Magenta (`0xFF00FF`) |
+
+**Implementation**: `Olympiad.java:154-176`
+
+```java
+public static String getDivision(int elo) {
+    if (elo < 1100) return DIV_BRONZE;
+    if (elo < 1300) return DIV_SILVER;
+    if (elo < 1500) return DIV_GOLD;
+    if (elo < 1800) return DIV_PLATINUM;
+    return DIV_DIAMOND;
+}
+```
+
+## Competition Mechanics
+
+### Match Types
+
+<AccordionGroup>
+  <Accordion title="Class-Based Matches" icon="users">
+    - Requires minimum **5 participants** of same class
+    - Entry cost: **3 Olympiad Points**
+    - Fair matchmaking within class restrictions
+    - Higher rewards for class victories
+  </Accordion>
+
+  <Accordion title="Non-Class Matches" icon="globe">
+    - Requires minimum **9 participants** total
+    - Entry cost: **5 Olympiad Points**
+    - Cross-class competition
+    - ELO-based matchmaking
+  </Accordion>
+</AccordionGroup>
+
+### Registration Restrictions
+
+Players cannot register if:
+- Not in base class (subclass prohibited)
+- Inventory 80%+ full
+- Less than 10 minutes until competition ends
+- Already registered or participating in events
+- Below minimum point requirements
+
+**Source**: `Olympiad.java:531-553`
+
+### Anti-Feeding Protection
+
+<Warning>
+  If the ELO difference between participants exceeds **400 points** (configurable via `OLYMPIAD_ELO_MAX_GAP`), the match awards **no ELO points**. This prevents high-ranked players from exploiting low-ranked accounts.
+</Warning>
+
+**Implementation**:
+```java
+if (Math.abs(player1Elo - player2Elo) > OLYMPIAD_ELO_MAX_GAP) {
+    // Match proceeds but no ELO changes
+    return;
+}
+```
+
+## Season System
+
+### Season Duration
+
+Seasons consist of multiple **cycles** (default: 3 cycles per season):
+- Each cycle lasts approximately 1 month
+- Competition period alternates with validation period
+- Weekly point bonuses during active cycles
+
+### Soft Reset Mechanics
+
+At season end, ELO ratings undergo **soft reset** rather than full reset:
+
+```java
+ELO_new = 1000 + (ELO_old - 1000) × SoftResetMultiplier
+```
+
+Default `SoftResetMultiplier`: `0.5`
+
+**Benefits**:
+- Maintains relative skill hierarchy
+- Reduces extreme rating gaps
+- Prevents unfair matchmaking at season start
+
+**Source**: `Olympiad.java:1575-1582`
+
+### Season Rewards
+
+Rewards are distributed based on final division:
+
+| Division | Default Reward | Count |
+|----------|----------------|-------|
+| Bronze | Gate Pass (6656) | 100 |
+| Silver | Gate Pass (6656) | 250 |
+| Gold | Gate Pass (6656) | 500 |
+| Platinum | Gate Pass (6656) | 1000 |
+| Diamond | Gate Pass (6656) | 2000 |
+
+<Note>
+  Rewards are configurable via `config/Olympiad.ini` season reward settings.
+</Note>
+
+## Hero Selection
+
+### Eligibility Requirements
+
+- Minimum **9 competitions completed**
+- At least **1 competition won**
+- Highest Olympiad points in class
+
+### Selection Process
+
+1. System queries top performer per class
+2. Ties broken by:
+   - Total competitions done (more is better)
+   - Competitions won (more is better)
+3. Heroes selected during validation period
+4. Special handling for Soul Hound classes (132/133 compete as one)
+
+**Source**: `Olympiad.java:1197-1330`
+
+## Configuration
+
+### Core Settings (`config/Olympiad.ini`)
+
+```ini
+# ELO System
+OlympiadEloInitialValue = 1000
+OlympiadEloKFactor = 32
+OlympiadEloMaxGap = 400
+OlympiadEloAnnounceThreshold = 1500
+OlympiadEloRewardMultiplier = 1.0
+
+# Season Settings
+OlympiadSeasonDuration = 3
+OlympiadSeasonSoftResetMultiplier = 0.5
+
+# Competition Settings
+OlympiadStartPoints = 18
+OlympiadWeeklyPoints = 3
+OlympiadMaxPoints = 10
+OlympiadClassedParticipants = 5
+OlympiadNonClassedParticipants = 9
+
+# Timing
+OlympiadStartTime = 18
+OlympiadCPeriod = 21600000  # 6 hours in ms
+OlympiadBattle = 360000     # 6 minutes
+```
+
+### Database Schema
+
+**olympiad_nobles table**:
+```sql
+CREATE TABLE olympiad_nobles (
+    charId INT,
+    class_id INT,
+    olympiad_points INT,
+    competitions_done INT,
+    competitions_won INT,
+    competitions_lost INT,
+    competitions_drawn INT,
+    elo INT,
+    PRIMARY KEY (charId)
+);
+```
+
+**olympiad_seasons_history table**:
+Stores historical data per season for tracking progression.
+
+## Competition Schedule
+
+### Period Types
+
+1. **Competition Period**: Active battles (default: 1 month)
+2. **Validation Period**: Hero selection (default: 24 hours)
+3. **Competition Hours**: Daily battle window (default: 6 hours starting 18:00)
+
+### Weekly Bonuses
+
+Players receive **3 Olympiad Points** automatically each week during competition period:
+
+```java
+protected void addWeeklyPoints() {
+    if (_period == 1) return;
+    
+    for (StatSet nobleInfo : NOBLES.values()) {
+        nobleInfo.set(POINTS, 
+            MathUtil.clamp(nobleInfo.getInt(POINTS, 0) + WEEKLY_POINTS, 0,
+                (nobleInfo.getInt(COMP_DONE, 0) * OLYMPIAD_MAX_POINTS) 
+                + (OLYMPIAD_WEEKLY_POINTS * 4)));
+    }
+}
+```
+
+**Source**: `Olympiad.java:988-999`
+
+## Thread Safety
+
+<Warning>
+  **Critical Fix Applied**: The original implementation had a race condition in `registerNoble()`. The fix uses `computeIfAbsent()` for atomic map operations:
+</Warning>
+
+```java
+// Fixed implementation (line 602)
+_classBasedRegisters.computeIfAbsent(
+    noble.getPlayerClass().getId(), 
+    k -> Collections.synchronizedList(new ArrayList<>())
+).add(noble);
+```
+
+**Issues Resolved**:
+- Prevented concurrent registration data loss
+- Eliminated `ConcurrentModificationException` during matchmaking
+- Ensured thread-safe participant list iteration
+
+**Source**: ELO_ANALYSIS.md lines 60-75
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="How does ELO matchmaking work?" icon="scale-balanced">
+    The system attempts to match players with similar ELO ratings. If the difference exceeds 400 points, the match awards no ELO changes to prevent exploitation.
+  </Accordion>
+
+  <Accordion title="Can I lose my Hero status?" icon="crown">
+    Yes, Hero status is recalculated each validation period. You must maintain top performance in your class to retain it.
+  </Accordion>
+
+  <Accordion title="What happens if I disconnect during a match?" icon="plug">
+    Disconnection counts as a loss. Your opponent receives a win, and you lose ELO points accordingly.
+  </Accordion>
+
+  <Accordion title="How are season rewards calculated?" icon="gift">
+    Rewards are based on your final division at season end. The amount scales with division tier (Bronze → Diamond).
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Clan System](/systems/clan-system) - Clan reputation from Olympiad victories
+- [Seven Signs](/systems/seven-signs) - Alternative competitive content
+
+## References
+
+- `Olympiad.java` - Core system implementation
+- `OlympiadConfig.java` - Configuration loader
+- `OlympiadGame.java` - Match execution logic
+- `ELO_ANALYSIS.md` - Technical deep-dive on rating system

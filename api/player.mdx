@@ -1,0 +1,448 @@
+---
+title: 'Player Class'
+description: 'Complete API reference for the Player class and character management'
+icon: 'user'
+---
+
+## Overview
+
+The `Player` class represents all player characters in the L2J Mobius Chronicle 4 game world. This class extends `Playable` and manages all aspects of player state, including inventory, skills, stats, and social interactions.
+
+**Package:** `org.l2jmobius.gameserver.model.actor`
+
+**Hierarchy:**
+```
+WorldObject
+  └── Creature
+      └── Playable
+          └── Player
+```
+
+**Source:** `model/actor/Player.java:339`
+
+## Class Hierarchy
+
+<CardGroup cols={2}>
+  <Card title="WorldObject" icon="cube">
+    Base class for all world objects with position and ID
+  </Card>
+  <Card title="Creature" icon="heart-pulse">
+    Adds HP/MP, combat, movement, and AI systems
+  </Card>
+  <Card title="Playable" icon="gamepad">
+    Shared functionality for players and summons
+  </Card>
+  <Card title="Player" icon="user">
+    Complete player character implementation
+  </Card>
+</CardGroup>
+
+## Key Properties
+
+### Character Identity
+
+<ParamField path="_accountName" type="String" required>
+  The account name associated with this character
+</ParamField>
+
+<ParamField path="_baseClass" type="int">
+  The character's base class ID (before subclass system)
+</ParamField>
+
+<ParamField path="_activeClass" type="int">
+  Currently active class ID (changes with subclass switching)
+</ParamField>
+
+<ParamField path="_classIndex" type="int" default="0">
+  Index of the current subclass (0 = main class)
+</ParamField>
+
+### Character Stats
+
+<ParamField path="_pvpKills" type="int">
+  Number of PvP kills (player killed was PvP flagged)
+</ParamField>
+
+<ParamField path="_pkKills" type="int">
+  PK counter (non-PvP flagged players killed)
+</ParamField>
+
+<ParamField path="_pvpFlag" type="byte">
+  PvP flag state: 0 = White (normal), 1 = Purple (PvP mode)
+</ParamField>
+
+<ParamField path="_fame" type="int">
+  Fame points accumulated by the character
+</ParamField>
+
+<ParamField path="_expBeforeDeath" type="long">
+  Experience points before the last death penalty
+</ParamField>
+
+### Social Features
+
+<ParamField path="_contactList" type="ContactList">
+  Manages contacts and social interactions
+</ParamField>
+
+<ParamField path="_friendList" type="Collection<Integer>">
+  Set of friend character IDs (thread-safe)
+</ParamField>
+
+### Olympiad
+
+<ParamField path="_inOlympiadMode" type="boolean" default="false">
+  Whether player is currently in Olympiad mode
+</ParamField>
+
+<ParamField path="_olympiadGameId" type="int" default="-1">
+  Current Olympiad game ID
+</ParamField>
+
+<ParamField path="_olympiadSide" type="int" default="-1">
+  Player's side in Olympiad match
+</ParamField>
+
+## Core Methods
+
+### Character Information
+
+<ResponseField name="getAccountName" type="String">
+  Returns the account name for this character
+  ```java
+  String accountName = player.getAccountName();
+  ```
+</ResponseField>
+
+<ResponseField name="getLevel" type="int">
+  Returns the current character level
+  ```java
+  int level = player.getLevel();
+  if (level >= 76) {
+      // High level content
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getTemplate" type="PlayerTemplate">
+  Returns the character template with base stats
+  ```java
+  PlayerTemplate template = player.getTemplate();
+  int baseCON = template.getBaseCON();
+  ```
+</ResponseField>
+
+### Stats and Appearance
+
+<ResponseField name="getStat" type="PlayerStat">
+  Returns the player's stat manager
+  ```java
+  PlayerStat stat = player.getStat();
+  stat.addExp(100000);
+  ```
+</ResponseField>
+
+<ResponseField name="getStatus" type="PlayerStatus">
+  Returns the player's status manager (HP/MP/CP)
+  ```java
+  PlayerStatus status = player.getStatus();
+  double currentHP = status.getCurrentHp();
+  status.setCurrentHp(currentHP + 500);
+  ```
+</ResponseField>
+
+<ResponseField name="getAppearance" type="PlayerAppearance">
+  Returns the player's visual appearance settings
+  ```java
+  PlayerAppearance appearance = player.getAppearance();
+  int hairStyle = appearance.getHairStyle();
+  ```
+</ResponseField>
+
+### PvP and Combat
+
+<ResponseField name="getPvpKills" type="int">
+  Returns total PvP kills
+  ```java
+  int pvpKills = player.getPvpKills();
+  ```
+</ResponseField>
+
+<ResponseField name="setPvpKills" type="void">
+  Sets PvP kill count
+  ```java
+  player.setPvpKills(player.getPvpKills() + 1);
+  ```
+</ResponseField>
+
+<ResponseField name="getPkKills" type="int">
+  Returns total PK (player kill) count
+  ```java
+  int pkCount = player.getPkKills();
+  if (pkCount > 5) {
+      // Player is a known PK
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="setPkKills" type="void">
+  Sets PK count
+  ```java
+  player.setPkKills(player.getPkKills() + 1);
+  ```
+</ResponseField>
+
+<ResponseField name="getPvpFlag" type="byte">
+  Returns current PvP flag state (0=white, 1=purple)
+  ```java
+  byte pvpFlag = player.getPvpFlag();
+  boolean isPvPFlagged = pvpFlag > 0;
+  ```
+</ResponseField>
+
+<ResponseField name="setPvpFlag" type="void">
+  Sets PvP flag state
+  ```java
+  player.setPvpFlag(1); // Flag as PvP
+  ```
+</ResponseField>
+
+### Quest Management
+
+<ResponseField name="getQuestState" type="QuestState">
+  Retrieves quest state for a specific quest
+  ```java
+  QuestState qs = player.getQuestState("Q00255_Tutorial");
+  if (qs != null && qs.isCompleted()) {
+      // Quest already completed
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="setQuestState" type="void">
+  Sets or updates quest state
+  ```java
+  QuestState newState = new QuestState(quest, player, State.STARTED);
+  player.setQuestState(newState);
+  ```
+</ResponseField>
+
+<ResponseField name="getAllActiveQuests" type="List<Quest>">
+  Returns all currently active quests
+  ```java
+  List<Quest> activeQuests = player.getAllActiveQuests();
+  for (Quest quest : activeQuests) {
+      player.sendMessage("Active: " + quest.getName());
+  }
+  ```
+</ResponseField>
+
+### Inventory and Items
+
+<ResponseField name="getInventory" type="PlayerInventory">
+  Returns the player's inventory
+  ```java
+  PlayerInventory inv = player.getInventory();
+  Item item = inv.getItemByItemId(57); // Get adena
+  ```
+</ResponseField>
+
+<ResponseField name="getWarehouse" type="PlayerWarehouse">
+  Returns the player's warehouse
+  ```java
+  PlayerWarehouse wh = player.getWarehouse();
+  int size = wh.getSize();
+  ```
+</ResponseField>
+
+### Subclass System
+
+<ResponseField name="setBaseClass" type="void">
+  Sets the character's base class
+  ```java
+  player.setBaseClass(PlayerClass.GLADIATOR);
+  ```
+</ResponseField>
+
+<ResponseField name="getSubClasses" type="Map<Integer, SubClassHolder>">
+  Returns all subclasses
+  ```java
+  Map<Integer, SubClassHolder> subClasses = player.getSubClasses();
+  for (SubClassHolder subClass : subClasses.values()) {
+      int classId = subClass.getClassId();
+  }
+  ```
+</ResponseField>
+
+### Siege and Territory
+
+<ResponseField name="getSiegeState" type="byte">
+  Returns current siege state
+  ```java
+  byte siegeState = player.getSiegeState();
+  ```
+</ResponseField>
+
+<ResponseField name="setSiegeState" type="void">
+  Sets siege state
+  ```java
+  player.setSiegeState((byte) 1);
+  ```
+</ResponseField>
+
+<ResponseField name="getSiegeSide" type="int">
+  Returns the castle/fort ID the player is registered for
+  ```java
+  int siegeSide = player.getSiegeSide();
+  ```
+</ResponseField>
+
+<ResponseField name="isSiegeFriend" type="boolean">
+  Checks if target is on same siege side
+  ```java
+  if (player.isSiegeFriend(target)) {
+      // Don't attack allies
+  }
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Creating and Managing Players
+
+```java
+// Access player instance (usually from client connection)
+Player player = client.getPlayer();
+
+// Get basic information
+String name = player.getName();
+int level = player.getLevel();
+int objectId = player.getObjectId();
+
+// Check player status
+boolean isOnline = player.isOnline();
+boolean isDead = player.isDead();
+boolean isInCombat = player.isInCombat();
+```
+
+### Managing Experience and Levels
+
+```java
+// Add experience
+long expToAdd = 100000;
+player.getStat().addExp(expToAdd);
+
+// Add skill points
+int spToAdd = 1000;
+player.getStat().addSp(spToAdd);
+
+// Check if can level up
+long currentExp = player.getStat().getExp();
+long expForNextLevel = player.getStat().getExpForLevel(player.getLevel() + 1);
+```
+
+### Quest Interaction
+
+```java
+// Get or create quest state
+QuestState qs = player.getQuestState("Q00255_Tutorial");
+if (qs == null) {
+    qs = quest.newQuestState(player);
+    player.setQuestState(qs);
+}
+
+// Set quest variable
+qs.set("cond", "1");
+
+// Give quest reward
+qs.giveItems(57, 10000); // 10000 adena
+qs.addExpAndSp(50000, 5000);
+qs.exitQuest(false); // Complete quest
+```
+
+### PvP Management
+
+```java
+// Handle PvP kill
+public void onPvPKill(Player killer, Player victim) {
+    if (victim.getPvpFlag() > 0) {
+        // Victim was flagged - legitimate PvP
+        killer.setPvpKills(killer.getPvpKills() + 1);
+    } else {
+        // Victim was not flagged - PK
+        killer.setPkKills(killer.getPkKills() + 1);
+        killer.setKarma(killer.getKarma() + 500);
+    }
+}
+
+// Flag player for PvP
+player.setPvpFlag(1);
+player.updatePvPFlag(1);
+```
+
+### Inventory Operations
+
+```java
+// Get inventory
+PlayerInventory inv = player.getInventory();
+
+// Add items
+Item item = inv.addItem("Quest", 57, 10000, player, null);
+
+// Remove items
+boolean removed = inv.destroyItemByItemId("Consume", 57, 5000, player, null);
+
+// Check inventory space
+int freeSlots = inv.getNonQuestSize();
+if (freeSlots < 5) {
+    player.sendMessage("Inventory almost full!");
+}
+```
+
+### Social Features
+
+```java
+// Add friend
+player.getFriendList().add(friendId);
+
+// Check if in friend list
+if (player.getFriendList().contains(targetId)) {
+    // Is friend
+}
+
+// Block player
+BlockList.addToBlockList(player, targetName);
+```
+
+## Related Classes
+
+<CardGroup cols={2}>
+  <Card title="PlayerStat" icon="chart-line" href="#">
+    Manages experience, levels, and stat calculations
+  </Card>
+  <Card title="PlayerStatus" icon="heart">
+    Manages HP, MP, CP regeneration and status
+  </Card>
+  <Card title="PlayerInventory" icon="bag-shopping">
+    Item storage and equipment management
+  </Card>
+  <Card title="PlayerTemplate" icon="file-code">
+    Base stats and class configuration
+  </Card>
+</CardGroup>
+
+## Constants
+
+| Constant | Value | Description |
+|----------|-------|-------------|
+| `ID_NONE` | -1 | Represents no ID/invalid ID |
+| `REQUEST_TIMEOUT` | 15 | Request timeout in seconds |
+| `NEWBIE_KEY` | "NEWBIE" | Key for newbie status variable |
+
+## Notes
+
+- The Player class is the most complex class in L2J Mobius with over 350KB of source code
+- Always use thread-safe methods when modifying player state from async tasks
+- Player data is auto-saved periodically via `PlayerAutoSaveTaskManager`
+- Use `player.sendPacket()` to send network packets to the client
+- Quest states are class-indexed for subclass support

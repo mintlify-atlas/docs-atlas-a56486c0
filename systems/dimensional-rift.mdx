@@ -1,0 +1,502 @@
+---
+title: 'Dimensional Rift'
+description: 'Party-based instanced dungeon system with progressive difficulty rooms'
+icon: 'portal'
+---
+
+## Overview
+
+Dimensional Rifts are instanced party dungeons tied to the Seven Signs system. Parties enter progressively challenging rooms filled with monsters, culminating in boss encounters. Rifts require **Dimensional Fragments** as entry currency and provide experience, loot, and contribution to the Seven Signs event.
+
+<Note>
+  Dimensional Rifts are only accessible during specific Seven Signs periods and require coordinated party play.
+</Note>
+
+## Entry Requirements
+
+### Party Requirements
+
+- **Minimum Party Size**: Configurable (default: 2-5 players)
+- **Level Range**: All members must be within level range for rift type
+- **Location**: All members must be in the waiting room zone
+- **Entry Item**: Dimensional Fragments (Item ID: 7079)
+
+**Source**: `DimensionalRiftManager.java:59-289`
+
+```java
+private static final int DIMENSIONAL_FRAGMENT_ITEM_ID = 7079;
+
+if (party.getMemberCount() < GeneralConfig.RIFT_MIN_PARTY_SIZE) {
+    final NpcHtmlMessage html = new NpcHtmlMessage(npc.getObjectId());
+    html.setFile(player, "data/html/seven_signs/rift/SmallParty.htm");
+    html.replace("%npc_name%", npc.getName());
+    html.replace("%count%", Integer.toString(GeneralConfig.RIFT_MIN_PARTY_SIZE));
+    player.sendPacket(html);
+    return;
+}
+```
+
+### Dimensional Fragments
+
+Obtained through:
+- Participation in Seven Signs events
+- Festival participation rewards
+- Monster drops during competition period
+- NPC purchases (Ancient Adena)
+
+**Fragment Costs** (per party member):
+- Varies by rift type and server configuration
+- Higher difficulty = more fragments required
+
+## Rift Types
+
+Seven difficulty tiers based on party average level:
+
+| Type | Name | Level Range | Difficulty | Rewards |
+|------|------|-------------|------------|----------|
+| 0 | Waiting Room | Any | None | Safe zone |
+| 1 | Recruit | 20-30 | Easy | Basic drops |
+| 2 | Soldier | 31-41 | Normal | Moderate drops |
+| 3 | Officer | 42-51 | Hard | Good drops |
+| 4 | Captain | 52-61 | Very Hard | Great drops |
+| 5 | Commander | 62-71 | Extreme | Excellent drops |
+| 6 | Hero | 72+ | Epic | Best drops |
+
+**Implementation**:
+```java
+// Type: 0 waiting room, 1 recruit, 2 soldier, 3 officer, 
+//       4 captain, 5 commander, 6 hero
+final byte type = rs.getByte("type");
+final byte room_id = rs.getByte("room_id");
+```
+
+**Source**: `DimensionalRiftManager.java:85-86`
+
+## Room Structure
+
+### Room Database Schema
+
+```sql
+CREATE TABLE dimensional_rift (
+    type TINYINT,          -- Rift type (0-6)
+    room_id TINYINT,       -- Room number
+    xMin INT,              -- Zone boundaries
+    xMax INT,
+    yMin INT,
+    yMax INT,
+    zMin INT,
+    zMax INT,
+    xT INT,                -- Teleport coordinates
+    yT INT,
+    zT INT,
+    boss TINYINT           -- Is boss room (0/1)
+);
+```
+
+### Room Loading
+
+```java
+private void loadRooms() {
+    try (Connection con = DatabaseFactory.getConnection();
+        Statement s = con.createStatement();
+        ResultSet rs = s.executeQuery("SELECT * FROM dimensional_rift")
+    ) {
+        while (rs.next()) {
+            final byte type = rs.getByte("type");
+            final byte room_id = rs.getByte("room_id");
+            
+            // Coords related
+            final int xMin = rs.getInt("xMin");
+            final int xMax = rs.getInt("xMax");
+            final int yMin = rs.getInt("yMin");
+            final int yMax = rs.getInt("yMax");
+            final int z1 = rs.getInt("zMin");
+            final int z2 = rs.getInt("zMax");
+            final int xT = rs.getInt("xT");
+            final int yT = rs.getInt("yT");
+            final int zT = rs.getInt("zT");
+            final boolean isBossRoom = rs.getByte("boss") > 0;
+            
+            if (!_rooms.containsKey(type)) {
+                _rooms.put(type, new HashMap<>(9));
+            }
+            
+            _rooms.get(type).put(room_id, 
+                new DimensionalRiftRoom(type, room_id, xMin, xMax, yMin, yMax, 
+                                        z1, z2, xT, yT, zT, isBossRoom)
+            );
+        }
+    }
+    
+    LOGGER.info(getClass().getSimpleName() + ": Loaded " + typeSize + 
+                " room types with " + roomSize + " rooms.");
+}
+```
+
+**Source**: `DimensionalRiftManager.java:77-121`
+
+### Room Properties
+
+```java
+public DimensionalRiftRoom getRoom(byte type, byte room) {
+    return _rooms.get(type) == null ? null : _rooms.get(type).get(room);
+}
+```
+
+**DimensionalRiftRoom class**:
+- Zone boundaries (min/max x, y, z)
+- Teleport destination coordinates
+- Boss room flag
+- Monster spawn list
+- Room completion status
+
+## Monster Spawns
+
+### Spawn Configuration
+
+Loaded from `data/DimensionalRift.xml`:
+
+```xml
+<rift>
+    <area type="1">
+        <room id="1">
+            <spawn mobId="18229" delay="60000" count="4" />
+            <spawn mobId="18230" delay="120000" count="2" />
+        </room>
+        <room id="2">
+            <spawn mobId="18231" delay="60000" count="5" />
+        </room>
+        <!-- More rooms -->
+    </area>
+    <!-- More types -->
+</rift>
+```
+
+### Spawn Loading System
+
+```java
+public void loadSpawns() {
+    int countGood = 0;
+    int countBad = 0;
+    
+    try {
+        final DocumentBuilderFactory factory = DocumentBuilderFactory.newInstance();
+        final File file = new File(ServerConfig.DATAPACK_ROOT, "data/DimensionalRift.xml");
+        final Document document = factory.newDocumentBuilder().parse(file);
+        
+        for (Node rift = document.getFirstChild(); rift != null; rift = rift.getNextSibling()) {
+            if ("rift".equalsIgnoreCase(rift.getNodeName())) {
+                for (Node area = rift.getFirstChild(); area != null; area = area.getNextSibling()) {
+                    if ("area".equalsIgnoreCase(area.getNodeName())) {
+                        attrs = area.getAttributes();
+                        type = Byte.parseByte(attrs.getNamedItem("type").getNodeValue());
+                        
+                        for (Node room = area.getFirstChild(); room != null; room = room.getNextSibling()) {
+                            if ("room".equalsIgnoreCase(room.getNodeName())) {
+                                attrs = room.getAttributes();
+                                roomId = Byte.parseByte(attrs.getNamedItem("id").getNodeValue());
+                                
+                                for (Node spawn = room.getFirstChild(); spawn != null; spawn = spawn.getNextSibling()) {
+                                    if ("spawn".equalsIgnoreCase(spawn.getNodeName())) {
+                                        attrs = spawn.getAttributes();
+                                        mobId = Integer.parseInt(attrs.getNamedItem("mobId").getNodeValue());
+                                        delay = Integer.parseInt(attrs.getNamedItem("delay").getNodeValue());
+                                        count = Integer.parseInt(attrs.getNamedItem("count").getNodeValue());
+                                        
+                                        for (int i = 0; i < count; i++) {
+                                            final DimensionalRiftRoom riftRoom = _rooms.get(type).get(roomId);
+                                            x = riftRoom.getRandomX();
+                                            y = riftRoom.getRandomY();
+                                            z = riftRoom.getTeleportCoorinates().getZ();
+                                            
+                                            final Spawn spawnDat = new Spawn(mobId);
+                                            spawnDat.setAmount(1);
+                                            spawnDat.setXYZ(x, y, z);
+                                            spawnDat.setHeading(-1);
+                                            spawnDat.setRespawnDelay(delay);
+                                            SpawnTable.getInstance().addSpawn(spawnDat);
+                                            _rooms.get(type).get(roomId).getSpawns().add(spawnDat);
+                                            countGood++;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    LOGGER.info(getClass().getSimpleName() + ": Loaded " + countGood + 
+                " dimensional rift spawns, " + countBad + " errors.");
+}
+```
+
+**Source**: `DimensionalRiftManager.java:123-220`
+
+## Entry System
+
+### Starting a Rift
+
+```java
+public synchronized void start(Player player, byte type, Npc npc) {
+    boolean canPass = true;
+    
+    if (!player.isInParty()) {
+        showHtmlFile(player, "data/html/seven_signs/rift/NoParty.htm", npc);
+        return;
+    }
+    
+    final Party party = player.getParty();
+    if (party.getLeaderObjectId() != player.getObjectId()) {
+        showHtmlFile(player, "data/html/seven_signs/rift/NotPartyLeader.htm", npc);
+        return;
+    }
+    
+    if (party.isInDimensionalRift()) {
+        handleCheat(player, npc);
+        return;
+    }
+    
+    if (party.getMemberCount() < GeneralConfig.RIFT_MIN_PARTY_SIZE) {
+        // Show small party error
+        return;
+    }
+    
+    // Check if rift type is full
+    if (!isAllowedEnter(type)) {
+        player.sendMessage("Rift is full. Try later.");
+        return;
+    }
+    
+    // Validate all members are in waiting room
+    for (Player p : party.getMembers()) {
+        if (!checkIfInPeaceZone(p.getX(), p.getY(), p.getZ())) {
+            canPass = false;
+        }
+    }
+    
+    if (!canPass) {
+        showHtmlFile(player, "data/html/seven_signs/rift/NotInWaitingRoom.htm", npc);
+        return;
+    }
+    
+    // Consume dimensional fragments
+    // Create rift instance
+    // Teleport party
+}
+```
+
+**Source**: `DimensionalRiftManager.java:259-300`
+
+### Zone Validation
+
+```java
+public boolean checkIfInRiftZone(int x, int y, int z, boolean ignorePeaceZone) {
+    if (ignorePeaceZone) {
+        return _rooms.get((byte) 0).get((byte) 1).checkIfInZone(x, y, z);
+    }
+    
+    return _rooms.get((byte) 0).get((byte) 1).checkIfInZone(x, y, z) && 
+           !_rooms.get((byte) 0).get((byte) 0).checkIfInZone(x, y, z);
+}
+
+public boolean checkIfInPeaceZone(int x, int y, int z) {
+    return _rooms.get((byte) 0).get((byte) 0).checkIfInZone(x, y, z);
+}
+```
+
+**Source**: `DimensionalRiftManager.java:239-252`
+
+## Rift Progression
+
+### Room Sequence
+
+1. **Entry Room**: Teleport arrival point
+2. **Combat Rooms**: 3-6 progressive rooms with increasing difficulty
+3. **Boss Room**: Final challenge with major rewards
+
+### Completion Mechanics
+
+<AccordionGroup>
+  <Accordion title="Clear Condition" icon="check">
+    Defeat all monsters in the room to unlock the portal to the next room.
+  </Accordion>
+
+  <Accordion title="Time Limit" icon="clock">
+    Each rift has a time limit (typically 20-30 minutes). Failure to complete results in ejection.
+  </Accordion>
+
+  <Accordion title="Party Wipe" icon="skull">
+    If all party members die, the rift instance collapses and the party is ejected.
+  </Accordion>
+
+  <Accordion title="Completion Rewards" icon="gift">
+    Boss room completion grants best loot and significant Seven Signs contribution.
+  </Accordion>
+</AccordionGroup>
+
+### Teleportation
+
+```java
+public void teleportToWaitingRoom(Player player) {
+    player.teleToLocation(getRoom((byte) 0, (byte) 0).getTeleportCoorinates());
+}
+```
+
+**Source**: `DimensionalRiftManager.java:254-257`
+
+## Rewards
+
+### Experience and Drops
+
+- **Experience**: Scaled to rift type and room difficulty
+- **SP (Skill Points)**: Bonus SP for completing rooms
+- **Items**: Equipment, consumables, crafting materials
+- **Seven Signs Items**: Seal stones, Ancient Adena
+
+### Boss Room Rewards
+
+<Warning>
+  Boss rooms provide the most valuable loot but require full party coordination and proper strategy.
+</Warning>
+
+**Typical Boss Drops**:
+- High-grade equipment pieces
+- Rare enchant scrolls
+- Large quantities of Ancient Adena
+- Special Seven Signs items
+
+## Configuration
+
+### General Config Settings
+
+```java
+// GeneralConfig.java
+RIFT_MIN_PARTY_SIZE = 2
+RIFT_MAX_JUMPS = 4
+RIFT_SPAWN_DELAY = 10000
+RIFT_AUTO_JUMPS_TIME_MIN = 480
+RIFT_AUTO_JUMPS_TIME_MAX = 600
+RIFT_ENTER_COST_RECRUIT = 18
+RIFT_ENTER_COST_SOLDIER = 21
+RIFT_ENTER_COST_OFFICER = 24
+RIFT_ENTER_COST_CAPTAIN = 27
+RIFT_ENTER_COST_COMMANDER = 30
+RIFT_ENTER_COST_HERO = 33
+```
+
+### Room Capacity
+
+```java
+// Maximum simultaneous parties in a rift type
+if (!isAllowedEnter(type)) {
+    player.sendMessage("Rift is full. Try later.");
+    return;
+}
+
+private boolean isAllowedEnter(byte type) {
+    // Max parties = (number of rooms - 1) to prevent instance collision
+    return getCurrentPartyCount(type) < (_rooms.get(type).size() - 1);
+}
+```
+
+## Strategy Guide
+
+### Party Composition
+
+**Recommended Setup**:
+- 1 Tank (Knight/Warrior)
+- 1-2 Healers (Bishop/Elder)
+- 2-3 DPS (Archer/Mage/Rogue)
+
+**Alternative Compositions**:
+- Heavy DPS: 1 Tank, 4 DPS (risky but fast)
+- Safe Clear: 1 Tank, 2 Healers, 2 DPS (slower but safer)
+
+### Combat Tips
+
+<AccordionGroup>
+  <Accordion title="Pull Management" icon="magnet">
+    Tank should pull monster groups to a safe location while DPS focuses fire. Avoid over-pulling.
+  </Accordion>
+
+  <Accordion title="Resource Conservation" icon="flask">
+    Don't waste mana/potions on trash mobs. Save cooldowns and consumables for boss rooms.
+  </Accordion>
+
+  <Accordion title="Boss Mechanics" icon="chess-king">
+    Study boss patterns. Many rift bosses have telegraph attacks that can be avoided.
+  </Accordion>
+
+  <Accordion title="Time Management" icon="hourglass">
+    Clear efficiently but safely. Rushing leads to wipes; too slow risks timeout.
+  </Accordion>
+</AccordionGroup>
+
+### Fragment Efficiency
+
+Maximize fragment value:
+- Run highest rift type your party can handle
+- Full clear all rooms for maximum drops
+- Coordinate with clan/alliance for organized runs
+- Farm fragments during Seven Signs competition period
+
+## Reloading System
+
+```java
+public void reload() {
+    for (Map<Byte, DimensionalRiftRoom> rooms : _rooms.values()) {
+        for (DimensionalRiftRoom room : rooms.values()) {
+            room.getSpawns().clear();
+        }
+        rooms.clear();
+    }
+    
+    _rooms.clear();
+    loadRooms();
+    loadSpawns();
+}
+```
+
+**Source**: `DimensionalRiftManager.java:222-237`
+
+Allows GM commands to reload rift configuration without server restart.
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can I solo a Dimensional Rift?" icon="user">
+    No, minimum party size is enforced (default 2 players). Solo entry is not possible.
+  </Accordion>
+
+  <Accordion title="What happens if party members disconnect?" icon="plug">
+    Disconnected members are ejected from the rift. If too many disconnect, the remaining party may not survive.
+  </Accordion>
+
+  <Accordion title="Can I re-enter after ejection?" icon="door-open">
+    No, once a rift instance is exited or failed, it collapses. You must create a new instance.
+  </Accordion>
+
+  <Accordion title="How many rifts can I run per day?" icon="calendar">
+    No hard limit, but you're constrained by Dimensional Fragment availability.
+  </Accordion>
+
+  <Accordion title="Do rift rewards count for Seven Signs?" icon="circle-half-stroke">
+    Yes, seal stones and other items collected contribute to your cabal's score during competition periods.
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Seven Signs](/systems/seven-signs) - Provides fragments and rewards contribution
+- [Clan System](/systems/clan-system) - Coordinate rift runs with clan members
+
+## References
+
+- `DimensionalRiftManager.java` - Core rift management system
+- `DimensionalRift.java` - Instance controller
+- `DimensionalRiftRoom.java` - Room data structure
+- `data/DimensionalRift.xml` - Spawn configuration
+- `dimensional_rift` table - Room definitions

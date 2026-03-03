@@ -1,0 +1,383 @@
+---
+title: 'Server Monitoring'
+description: 'Performance monitoring, logging, and metrics for L2J Mobius Chronicle 4'
+icon: 'chart-line'
+---
+
+Effective server monitoring is crucial for maintaining a stable and performant Lineage 2 server. This guide covers logging configuration, performance metrics, and monitoring tools.
+
+## Server Information Dashboard
+
+### Real-time Metrics
+
+Use the `//serverinfo` admin command to view comprehensive server statistics:
+
+```bash
+//serverinfo
+```
+
+**Metrics displayed:**
+
+<CardGroup cols={2}>
+  <Card title="System Info" icon="server">
+    - Operating system name and version
+    - Server uptime
+    - Current server time
+    - Game time and day/night cycle
+  </Card>
+  <Card title="Player Statistics" icon="users">
+    - Total online players
+    - Offline trade shops
+    - Online GMs
+    - Real players (unique IPs)
+  </Card>
+  <Card title="Memory Usage" icon="memory">
+    - Used heap memory
+    - Free heap memory
+    - Total allocated memory
+    - Garbage collection metrics
+  </Card>
+  <Card title="Thread Statistics" icon="microchip">
+    - Live threads
+    - Daemon threads
+    - Peak thread count
+    - Total started threads
+  </Card>
+</CardGroup>
+
+### Implementation Details
+
+The server info command uses Java Management Extensions (JMX) to gather metrics:
+
+**Source:** `handlers/admincommandhandlers/AdminServerInfo.java:59`
+
+```java
+final MemoryMXBean MEMORY_MX_BEAN = ManagementFactory.getMemoryMXBean();
+final ThreadMXBean THREAD_MX_BEAN = ManagementFactory.getThreadMXBean();
+```
+
+## Memory Monitoring
+
+### Heap Memory Analysis
+
+<Accordion title="Memory Metrics Breakdown">
+  **Used Memory:** Current heap memory consumption
+  
+  **Free Memory:** Available heap space for allocation
+  
+  **Total Memory:** Maximum heap size configured for JVM
+  
+  **Calculation:**
+  ```java
+  final MemoryUsage heapMemoryUsage = MEMORY_MX_BEAN.getHeapMemoryUsage();
+  final long freeMemory = heapMemoryUsage.getMax() - heapMemoryUsage.getUsed();
+  ```
+  
+  **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:61`
+</Accordion>
+
+### Garbage Collection Monitoring
+
+The server tracks garbage collection statistics:
+
+- **Collector Name:** G1 Young Generation / G1 Old Generation
+- **Collection Count:** Total number of GC cycles
+- **Collection Time:** Cumulative time spent in GC
+
+<Warning>
+High collection time or frequent collections may indicate memory pressure. Consider increasing heap size or optimizing server configuration.
+</Warning>
+
+### JVM Memory Configuration
+
+Configure JVM memory settings in your startup script:
+
+```bash
+java -Xms2G -Xmx4G -XX:+UseG1GC \
+  -jar L2J_Mobius_C4_ScionsOfDestiny.jar
+```
+
+**Recommended settings:**
+- `-Xms`: Initial heap size (2-4GB for small servers)
+- `-Xmx`: Maximum heap size (4-8GB for medium servers)
+- `-XX:+UseG1GC`: Use G1 garbage collector
+
+## Player Connection Monitoring
+
+### Online Player Tracking
+
+Monitor different player categories:
+
+<AccordionGroup>
+  <Accordion title="Total Online Players" icon="users">
+    All connected players including offline shops.
+    
+    ```java
+    World.getInstance().getPlayers().size()
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:119`
+  </Accordion>
+
+  <Accordion title="Offline Trade Shops" icon="store">
+    Players in offline trade mode.
+    
+    ```java
+    if ((player.getClient() == null) || player.getClient().isDetached())
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:130`
+  </Accordion>
+
+  <Accordion title="Online GMs" icon="shield">
+    Currently connected administrators.
+    
+    ```java
+    AdminData.getInstance().getAllGms(true)
+    ```
+    
+    **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:140`
+  </Accordion>
+
+  <Accordion title="Real Players (Unique IPs)" icon="network-wired">
+    Unique player connections by IP address.
+    
+    Helps identify concurrent accounts and server load.
+    
+    **Source:** `handlers/admincommandhandlers/AdminServerInfo.java:153`
+  </Accordion>
+</AccordionGroup>
+
+### Connection Limits
+
+Maximum players configured in `dist/game/config/General.ini`:
+
+```ini
+MaximumOnlineUsers = 100
+```
+
+## Logging Configuration
+
+### Log Files Location
+
+Server logs are stored in:
+```
+dist/game/log/
+├── java.log          # Main server log
+├── chat.log          # Chat messages
+├── items.log         # Item transactions
+├── audit.log         # GM actions audit
+└── error.log         # Error messages
+```
+
+### Java Logging Configuration
+
+Logging is configured via Java's built-in logging framework:
+
+```java
+import java.util.logging.Logger;
+
+private static final Logger LOGGER = Logger.getLogger(AdminServerInfo.class.getName());
+```
+
+<Note>
+Most admin command handlers include logging for auditing purposes.
+</Note>
+
+### GM Audit Logging
+
+All administrative actions are logged via `GMAudit` class:
+
+**Example from AdminPunishment.java:320**
+```java
+GMAudit.logAction(activeChar.getName() + " [" + activeChar.getObjectId() + "]", 
+                  cmd, affect.name(), name);
+```
+
+**Logged actions include:**
+- Player punishments (ban, jail, chat ban)
+- Character modifications
+- Spawning NPCs/items
+- Teleportation commands
+- Server configuration changes
+
+## Performance Metrics
+
+### Thread Monitoring
+
+**Live Threads:** Currently active threads
+```java
+THREAD_MX_BEAN.getThreadCount()
+```
+
+**Daemon Threads:** Background service threads
+```java
+THREAD_MX_BEAN.getDaemonThreadCount()
+```
+
+**Peak Threads:** Maximum concurrent threads reached
+```java
+THREAD_MX_BEAN.getPeakThreadCount()
+```
+
+**Source:** `handlers/admincommandhandlers/AdminServerInfo.java:63`
+
+<Warning>
+Extremely high thread counts (>1000) may indicate thread leaks or performance issues.
+</Warning>
+
+### Server Uptime
+
+Uptime is calculated from server start time:
+
+```java
+long time = System.currentTimeMillis() - GameServer.getStartTime();
+final long days = TimeUnit.MILLISECONDS.toDays(time);
+final long hours = TimeUnit.MILLISECONDS.toHours(time);
+```
+
+**Source:** `handlers/admincommandhandlers/AdminServerInfo.java:106`
+
+## Game Time System
+
+Monitor in-game time and day/night cycles:
+
+### Game Time Manager
+
+```java
+GameTimeTaskManager.getInstance().getGameTime();
+GameTimeTaskManager.getInstance().isNight();
+```
+
+**Features:**
+- 24-hour game day cycle
+- Day/night status tracking
+- Used for spawn schedules and events
+
+**Source:** `handlers/admincommandhandlers/AdminServerInfo.java:74`
+
+## Cache Monitoring
+
+### HTML Cache Statistics
+
+Monitor HTML template cache usage:
+
+```bash
+//reload html
+```
+
+**Output includes:**
+- Memory usage in megabytes
+- Number of loaded files
+
+**Source:** `handlers/admincommandhandlers/AdminReload.java:150`
+
+## Database Monitoring
+
+### Connection Pool
+
+The server uses HikariCP for database connection pooling. Monitor connections via:
+
+**Configuration location:**
+```
+dist/game/config/Database.ini
+```
+
+**Key settings:**
+```ini
+MaximumPoolSize = 10
+ConnectionTimeout = 30000
+IdleTimeout = 600000
+```
+
+### Database Operations Logging
+
+Database queries can be logged for performance analysis. Enable in `Database.ini`:
+
+```ini
+# Enable query logging (development only)
+LogQueries = True
+```
+
+<Warning>
+Query logging significantly impacts performance. Only enable in development environments.
+</Warning>
+
+## Geodata Status
+
+Monitor pathfinding and geodata status:
+
+**Configuration:** `dist/game/config/GeoEngine.ini`
+
+```java
+GeoEngineConfig.PATHFINDING > 0 ? "Enabled" : "Disabled"
+```
+
+**Source:** `handlers/admincommandhandlers/AdminServerInfo.java:76`
+
+## Broadcast Messages to GMs
+
+Many monitoring events broadcast to all online GMs:
+
+```java
+AdminData.getInstance().broadcastMessageToGMs(activeChar.getName() + ": Reloaded Configs.");
+```
+
+**Source:** `handlers/admincommandhandlers/AdminReload.java:84`
+
+**Broadcasted events:**
+- Configuration reloads
+- Data reloads
+- Critical errors
+- Player reports
+
+## External Monitoring Tools
+
+### JMX Monitoring
+
+Enable JMX for external monitoring tools:
+
+```bash
+java -Dcom.sun.management.jmxremote \
+  -Dcom.sun.management.jmxremote.port=9999 \
+  -Dcom.sun.management.jmxremote.authenticate=false \
+  -Dcom.sun.management.jmxremote.ssl=false \
+  -jar L2J_Mobius_C4_ScionsOfDestiny.jar
+```
+
+**Compatible tools:**
+- VisualVM
+- JConsole
+- Java Mission Control
+
+### Custom Monitoring Scripts
+
+You can create custom monitoring by extending admin command handlers or using the server's MBean infrastructure.
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Regular Monitoring" icon="clock">
+    Check server metrics at regular intervals during peak hours
+  </Card>
+  <Card title="Log Rotation" icon="rotate">
+    Implement log rotation to prevent disk space issues
+  </Card>
+  <Card title="Baseline Metrics" icon="chart-simple">
+    Establish baseline performance metrics for comparison
+  </Card>
+  <Card title="Alert Thresholds" icon="bell">
+    Set up alerts for memory usage, thread count, and player limits
+  </Card>
+</CardGroup>
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Admin Commands" icon="terminal" href="/admin/commands">
+    Command reference for server management
+  </Card>
+  <Card title="Troubleshooting" icon="wrench" href="/admin/troubleshooting">
+    Common issues and solutions
+  </Card>
+</CardGroup>

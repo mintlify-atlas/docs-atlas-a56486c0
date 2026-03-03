@@ -1,0 +1,260 @@
+---
+title: 'Installation'
+description: 'System requirements, Java 25 setup, and build process for L2J Mobius Chronicle 4'
+---
+
+## System Requirements
+
+Before installing L2J Mobius Chronicle 4, ensure your system meets the following requirements:
+
+### Hardware Requirements
+
+- **CPU**: Multi-core processor (4+ cores recommended)
+- **RAM**: Minimum 4GB (16GB+ recommended for production)
+- **Storage**: 10GB+ free disk space
+- **Network**: Stable internet connection with static IP (for public servers)
+
+### Software Requirements
+
+<Warning>
+  Java 25 is **required** for L2J Mobius Chronicle 4. Earlier versions will not work.
+</Warning>
+
+- **Java Development Kit (JDK) 25**
+- **Apache Ant 1.8.2+** (for building from source)
+- **MySQL 5.7+** or **MariaDB 10.3+**
+- **Operating System**: Linux (recommended), Windows, or macOS
+
+## Installing Java 25
+
+<Tabs>
+  <Tab title="Linux (Ubuntu/Debian)">
+    ```bash
+    # Download and install OpenJDK 25
+    wget https://download.oracle.com/java/25/latest/jdk-25_linux-x64_bin.tar.gz
+    tar -xzf jdk-25_linux-x64_bin.tar.gz
+    sudo mv jdk-25 /opt/
+
+    # Set environment variables
+    export JAVA_HOME=/opt/jdk-25
+    export PATH=$JAVA_HOME/bin:$PATH
+
+    # Add to .bashrc or .profile for persistence
+    echo 'export JAVA_HOME=/opt/jdk-25' >> ~/.bashrc
+    echo 'export PATH=$JAVA_HOME/bin:$PATH' >> ~/.bashrc
+    source ~/.bashrc
+
+    # Verify installation
+    java -version
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Download JDK 25 from Oracle website
+    # Install the .exe installer
+
+    # Set environment variables
+    setx JAVA_HOME "C:\Program Files\Java\jdk-25"
+    setx PATH "%JAVA_HOME%\bin;%PATH%"
+
+    # Verify installation (open new terminal)
+    java -version
+    ```
+  </Tab>
+  <Tab title="macOS">
+    ```bash
+    # Download and install JDK 25
+    brew install openjdk@25
+
+    # Link the installation
+    sudo ln -sfn /opt/homebrew/opt/openjdk@25/libexec/openjdk.jdk /Library/Java/JavaVirtualMachines/openjdk-25.jdk
+
+    # Set environment variables
+    export JAVA_HOME=/Library/Java/JavaVirtualMachines/openjdk-25.jdk/Contents/Home
+    export PATH=$JAVA_HOME/bin:$PATH
+
+    # Verify installation
+    java -version
+    ```
+  </Tab>
+</Tabs>
+
+## Installing Apache Ant
+
+<Tabs>
+  <Tab title="Linux">
+    ```bash
+    sudo apt-get update
+    sudo apt-get install ant
+
+    # Verify installation
+    ant -version
+    ```
+  </Tab>
+  <Tab title="Windows">
+    ```powershell
+    # Download Apache Ant from https://ant.apache.org/bindownload.cgi
+    # Extract to C:\ant
+
+    # Add to PATH
+    setx PATH "%PATH%;C:\ant\bin"
+
+    # Verify (open new terminal)
+    ant -version
+    ```
+  </Tab>
+  <Tab title="macOS">
+    ```bash
+    brew install ant
+
+    # Verify installation
+    ant -version
+    ```
+  </Tab>
+</Tabs>
+
+## Build Process
+
+<Steps>
+  <Step title="Clone or Download Source">
+    Download the L2J Mobius Chronicle 4 source code to your server:
+
+    ```bash
+    cd /opt
+    git clone <repository-url> l2jmobius-c4
+    cd l2jmobius-c4
+    ```
+
+    <Info>
+      The source directory contains the `build.xml` file which defines the build process.
+    </Info>
+  </Step>
+
+  <Step title="Build with Ant">
+    The build process compiles the source code and creates JAR files for the LoginServer, GameServer, and DatabaseInstaller.
+
+    ```bash
+    # Run the build from the source directory
+    ant
+    ```
+
+    The build process performs the following steps:
+    - Validates Java 25 is installed
+    - Compiles Java source code from `java/` directory
+    - Creates JAR files in `../build/dist/libs/`:
+      - `LoginServer.jar`
+      - `GameServer.jar`
+      - `DatabaseInstaller.jar`
+    - Packages everything into `L2J_Mobius_C4_ScionsOfDestiny.zip`
+
+    <Note>
+      The build.xml file at `~/workspace/source/build.xml:55` explicitly checks for Java 25:
+      ```xml
+      <fail unless="JDK25.present" message="Java 25 is required..." />
+      ```
+    </Note>
+  </Step>
+
+  <Step title="Verify Build Output">
+    After successful build, verify the JAR files were created:
+
+    ```bash
+    ls -lh ../build/dist/libs/
+    ```
+
+    You should see:
+    ```
+    GameServer.jar
+    LoginServer.jar
+    ../build/dist/db_installer/DatabaseInstaller.jar
+    ```
+  </Step>
+
+  <Step title="Deploy Distribution Files">
+    The compiled server is ready in the `dist/` directory:
+
+    ```bash
+    # Distribution structure
+    dist/
+    ├── game/          # GameServer files
+    ├── login/         # LoginServer files
+    ├── db_installer/  # Database installation tool
+    ├── libs/          # Required JAR libraries
+    └── backup/        # Database backups location
+    ```
+
+    Copy or extract the distribution to your deployment location:
+
+    ```bash
+    # Option 1: Use the existing dist folder
+    cd dist
+
+    # Option 2: Extract the built zip
+    unzip ../build/L2J_Mobius_C4_ScionsOfDestiny.zip -d /opt/l2j-server
+    cd /opt/l2j-server
+    ```
+  </Step>
+</Steps>
+
+## Directory Structure
+
+After installation, your server directory structure will be:
+
+```
+l2j-server/
+├── game/
+│   ├── config/           # GameServer configuration files
+│   ├── data/            # Game data (XML files)
+│   ├── log/             # Server logs
+│   ├── GameServer.sh    # Linux startup script
+│   ├── GameServerTask.sh
+│   └── java.cfg         # JVM settings
+├── login/
+│   ├── config/          # LoginServer configuration files
+│   ├── log/            # Login server logs
+│   ├── LoginServer.sh   # Linux startup script
+│   ├── LoginServerTask.sh
+│   ├── GameServerRegister.sh
+│   └── java.cfg        # JVM settings
+├── db_installer/
+│   ├── sql/            # Database schemas
+│   └── DatabaseInstaller.sh
+├── libs/               # JAR libraries
+└── backup/            # Database backup storage
+```
+
+## JVM Configuration
+
+The server uses configuration files to set JVM parameters:
+
+<CodeGroup>
+```bash game/java.cfg
+-server -Dfile.encoding=UTF-8
+-Djava.util.logging.manager=org.l2jmobius.log.ServerLogManager
+-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn
+-XX:+UseZGC
+-Xmx32g      # Maximum heap: 32GB (adjust for your system)
+-Xms16g      # Initial heap: 16GB
+```
+
+```bash login/java.cfg
+-server -Dfile.encoding=UTF-8
+-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn
+-XX:+UseZGC
+-Xms128m     # Initial heap: 128MB
+-Xmx256m     # Maximum heap: 256MB
+```
+</CodeGroup>
+
+<Warning>
+  Adjust `-Xmx` and `-Xms` values based on your available system RAM. The GameServer requires significantly more memory than the LoginServer.
+</Warning>
+
+## Next Steps
+
+After successful installation:
+
+1. [Set up the database](/setup/database)
+2. [Configure the LoginServer](/setup/login-server)
+3. [Configure the GameServer](/setup/game-server)
+4. [Review configuration files](/setup/configuration)

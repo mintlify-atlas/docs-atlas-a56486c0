@@ -1,0 +1,621 @@
+---
+title: 'Item System'
+description: 'Complete API reference for items, equipment, and inventory management'
+icon: 'bag-shopping'
+---
+
+## Overview
+
+The L2J Mobius item system handles all game items including weapons, armor, consumables, quest items, and more. The system uses templates for item definitions and instances for actual item objects in the game world.
+
+**Package:** `org.l2jmobius.gameserver.model.item`
+
+## Class Hierarchy
+
+```
+ListenersContainer
+  └── ItemTemplate (Abstract)
+      ├── Weapon
+      ├── Armor
+      └── EtcItem
+
+WorldObject
+  └── Item (Instance)
+```
+
+<CardGroup cols={2}>
+  <Card title="ItemTemplate" icon="file-code">
+    Base template class with item definitions
+  </Card>
+  <Card title="Item" icon="cube">
+    Actual item instance in the world
+  </Card>
+  <Card title="Weapon" icon="sword">
+    Weapon-specific template properties
+  </Card>
+  <Card title="Armor" icon="shield">
+    Armor and accessory templates
+  </Card>
+</CardGroup>
+
+## ItemTemplate Class
+
+### Overview
+
+Abstract base class containing static item information shared across all instances of that item type.
+
+**Source:** `model/item/ItemTemplate.java:62`
+
+### Core Properties
+
+<ParamField path="_itemId" type="int" required>
+  Unique item ID
+</ParamField>
+
+<ParamField path="_displayId" type="int">
+  Display ID for client (defaults to itemId)
+</ParamField>
+
+<ParamField path="_name" type="String" required>
+  Item name
+</ParamField>
+
+<ParamField path="_icon" type="String">
+  Icon file path
+</ParamField>
+
+<ParamField path="_weight" type="int" default="0">
+  Item weight in inventory units
+</ParamField>
+
+<ParamField path="_stackable" type="boolean" default="false">
+  Whether items can stack in inventory
+</ParamField>
+
+<ParamField path="_materialType" type="MaterialType" default="STEEL">
+  Material type: STEEL, BRONZE, SILVER, GOLD, etc.
+</ParamField>
+
+<ParamField path="_crystalType" type="CrystalType" default="NONE">
+  Crystal grade: NONE, D, C, B, A, S
+</ParamField>
+
+<ParamField path="_bodyPart" type="BodyPart">
+  Equipment slot: CHEST, LEGS, HEAD, FEET, etc.
+</ParamField>
+
+<ParamField path="_referencePrice" type="int" default="0">
+  Base price for NPC shops
+</ParamField>
+
+<ParamField path="_crystalCount" type="int" default="0">
+  Number of crystals when destroyed
+</ParamField>
+
+### Item Flags
+
+<ParamField path="_sellable" type="boolean" default="true">
+  Can be sold to NPCs
+</ParamField>
+
+<ParamField path="_dropable" type="boolean" default="true">
+  Can be dropped on ground
+</ParamField>
+
+<ParamField path="_destroyable" type="boolean" default="true">
+  Can be destroyed
+</ParamField>
+
+<ParamField path="_tradeable" type="boolean" default="true">
+  Can be traded to other players
+</ParamField>
+
+<ParamField path="_depositable" type="boolean" default="true">
+  Can be stored in warehouse
+</ParamField>
+
+<ParamField path="_enchantable" type="boolean" default="false">
+  Can be enchanted
+</ParamField>
+
+<ParamField path="_questItem" type="boolean" default="false">
+  Is a quest item
+</ParamField>
+
+### Key Methods
+
+<ResponseField name="getItemId" type="int">
+  Returns the item's unique ID
+  ```java
+  int itemId = template.getItemId();
+  if (itemId == 57) {
+      // This is Adena
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getName" type="String">
+  Returns the item name
+  ```java
+  String name = template.getName();
+  ```
+</ResponseField>
+
+<ResponseField name="getWeight" type="int">
+  Returns item weight
+  ```java
+  int weight = template.getWeight();
+  int totalWeight = weight * count;
+  ```
+</ResponseField>
+
+<ResponseField name="isStackable" type="boolean">
+  Checks if item can stack
+  ```java
+  if (template.isStackable()) {
+      // Can combine stacks
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getCrystalType" type="CrystalType">
+  Returns crystal grade
+  ```java
+  CrystalType grade = template.getCrystalType();
+  if (grade.isGreaterThan(CrystalType.C)) {
+      // High grade item
+  }
+  ```
+</ResponseField>
+
+## Weapon Class
+
+### Overview
+
+Extends ItemTemplate with weapon-specific properties.
+
+**Source:** `model/item/Weapon.java:45`
+
+### Weapon Properties
+
+<ParamField path="_type" type="WeaponType" required>
+  Weapon type: SWORD, BOW, DAGGER, BLUNT, etc.
+</ParamField>
+
+<ParamField path="_isMagicWeapon" type="boolean" default="false">
+  Whether weapon is magic-based
+</ParamField>
+
+<ParamField path="_soulShotCount" type="int" default="0">
+  Soulshots consumed per attack
+</ParamField>
+
+<ParamField path="_spiritShotCount" type="int" default="0">
+  Spiritshots consumed per attack
+</ParamField>
+
+<ParamField path="_mpConsume" type="int" default="0">
+  MP consumed per attack
+</ParamField>
+
+<ParamField path="_baseAttackRange" type="int" default="40">
+  Base attack range
+</ParamField>
+
+<ParamField path="_baseAttackRadius" type="int">
+  Attack radius for area weapons
+</ParamField>
+
+<ParamField path="_baseAttackAngle" type="int">
+  Attack angle for area weapons
+</ParamField>
+
+### Weapon Methods
+
+<ResponseField name="getWeaponType" type="WeaponType">
+  Returns the weapon type
+  ```java
+  WeaponType type = weapon.getWeaponType();
+  if (type == WeaponType.BOW) {
+      // Bow-specific logic
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="isMagicWeapon" type="boolean">
+  Checks if weapon is magic-based
+  ```java
+  if (weapon.isMagicWeapon()) {
+      // Use M.Atk instead of P.Atk
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getSoulShotCount" type="int">
+  Returns soulshot consumption
+  ```java
+  int ssCount = weapon.getSoulShotCount();
+  ```
+</ResponseField>
+
+<ResponseField name="getAttackRange" type="int">
+  Returns attack range
+  ```java
+  int range = weapon.getAttackRange();
+  ```
+</ResponseField>
+
+## Armor Class
+
+### Overview
+
+Extends ItemTemplate for armor and accessories.
+
+**Source:** `model/item/Armor.java:32`
+
+### Armor Properties
+
+<ParamField path="_type" type="ArmorType" required>
+  Armor type: LIGHT, HEAVY, MAGIC, SHIELD, etc.
+</ParamField>
+
+<ParamField path="_enchant4Skill" type="SkillHolder">
+  Skill activated when enchanted to +4
+</ParamField>
+
+### Armor Methods
+
+<ResponseField name="getArmorType" type="ArmorType">
+  Returns the armor type
+  ```java
+  ArmorType type = armor.getArmorType();
+  if (type == ArmorType.HEAVY) {
+      // Heavy armor penalties
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="getEnchant4Skill" type="Skill">
+  Returns the +4 enchant skill
+  ```java
+  Skill skill = armor.getEnchant4Skill();
+  if (skill != null) {
+      skill.applyEffects(player, player);
+  }
+  ```
+</ResponseField>
+
+## Item Class (Instance)
+
+### Overview
+
+Represents an actual item instance in the game world or inventory.
+
+**Source:** `model/item/instance/Item.java:88`
+
+### Instance Properties
+
+<ParamField path="_ownerId" type="int">
+  Object ID of the item owner
+</ParamField>
+
+<ParamField path="_count" type="int" required>
+  Quantity of items in this stack
+</ParamField>
+
+<ParamField path="_loc" type="ItemLocation">
+  Location: INVENTORY, WAREHOUSE, PAPERDOLL, etc.
+</ParamField>
+
+<ParamField path="_locData" type="int">
+  Slot number or additional location data
+</ParamField>
+
+<ParamField path="_enchantLevel" type="int" default="0">
+  Current enchant level
+</ParamField>
+
+<ParamField path="_mana" type="int" default="-1">
+  Remaining mana for shadow items
+</ParamField>
+
+<ParamField path="_dropTime" type="long">
+  When item was dropped (for cleanup)
+</ParamField>
+
+### Instance Methods
+
+<ResponseField name="getTemplate" type="ItemTemplate">
+  Returns the item template
+  ```java
+  ItemTemplate template = item.getTemplate();
+  String name = template.getName();
+  ```
+</ResponseField>
+
+<ResponseField name="getCount" type="int">
+  Returns item quantity
+  ```java
+  int count = item.getCount();
+  ```
+</ResponseField>
+
+<ResponseField name="setCount" type="void">
+  Sets item quantity
+  ```java
+  item.setCount(item.getCount() + 10);
+  ```
+</ResponseField>
+
+<ResponseField name="getEnchantLevel" type="int">
+  Returns enchant level
+  ```java
+  int enchant = item.getEnchantLevel();
+  if (enchant >= 4) {
+      // Apply enchant skill
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="setEnchantLevel" type="void">
+  Sets enchant level
+  ```java
+  item.setEnchantLevel(item.getEnchantLevel() + 1);
+  ```
+</ResponseField>
+
+<ResponseField name="getOwnerId" type="int">
+  Returns owner's object ID
+  ```java
+  int ownerId = item.getOwnerId();
+  ```
+</ResponseField>
+
+<ResponseField name="getLocation" type="ItemLocation">
+  Returns item location
+  ```java
+  ItemLocation loc = item.getLocation();
+  if (loc == ItemLocation.PAPERDOLL) {
+      // Item is equipped
+  }
+  ```
+</ResponseField>
+
+<ResponseField name="isEquipped" type="boolean">
+  Checks if item is equipped
+  ```java
+  if (item.isEquipped()) {
+      // Item bonuses are active
+  }
+  ```
+</ResponseField>
+
+## Usage Examples
+
+### Creating Items
+
+```java
+// Get item template
+ItemTemplate template = ItemData.getInstance().getTemplate(57);
+
+// Create item instance
+Item item = new Item(57);
+item.setCount(10000);
+item.setEnchantLevel(0);
+```
+
+### Inventory Operations
+
+```java
+// Add item to player inventory
+PlayerInventory inv = player.getInventory();
+Item item = inv.addItem("Reward", 57, 10000, player, null);
+
+// Remove items
+boolean removed = inv.destroyItemByItemId("Consume", 57, 5000, player, null);
+
+// Get item by object ID
+Item item = inv.getItemByObjectId(objectId);
+
+// Get items by item ID
+List<Item> items = inv.getItemsByItemId(itemId);
+```
+
+### Equipment Management
+
+```java
+// Equip weapon
+Item weapon = inv.getItemByObjectId(weaponObjId);
+if (weapon != null && weapon.isWeapon()) {
+    inv.equipItem(weapon);
+}
+
+// Unequip armor
+Item chest = inv.getPaperdollItem(Inventory.PAPERDOLL_CHEST);
+if (chest != null) {
+    inv.unEquipItemInBodySlot(Inventory.PAPERDOLL_CHEST);
+}
+
+// Get equipped weapon
+Weapon equippedWeapon = player.getActiveWeaponItem();
+if (equippedWeapon != null) {
+    int pAtk = equippedWeapon.getPAtk();
+}
+```
+
+### Enchanting Items
+
+```java
+public boolean enchantItem(Player player, Item item, Item scroll) {
+    ItemTemplate template = item.getTemplate();
+    
+    // Check if enchantable
+    if (!template.isEnchantable()) {
+        player.sendMessage("This item cannot be enchanted.");
+        return false;
+    }
+    
+    // Check crystal type
+    if (scroll.getCrystalType() != item.getCrystalType()) {
+        player.sendMessage("Scroll grade doesn't match item grade.");
+        return false;
+    }
+    
+    // Calculate success chance
+    int currentEnchant = item.getEnchantLevel();
+    int successChance = calculateChance(currentEnchant);
+    
+    // Attempt enchant
+    if (Rnd.get(100) < successChance) {
+        item.setEnchantLevel(currentEnchant + 1);
+        player.sendMessage("Enchant successful! +" + item.getEnchantLevel());
+        return true;
+    } else {
+        // Enchant failed
+        if (currentEnchant >= 4) {
+            player.getInventory().destroyItem("Enchant Failed", item, player, null);
+            player.sendMessage("Enchant failed and item was destroyed.");
+        } else {
+            player.sendMessage("Enchant failed.");
+        }
+        return false;
+    }
+}
+```
+
+### Drop System
+
+```java
+// Drop item on ground
+public void dropItem(Player player, Item item, int count) {
+    Item drop = player.getInventory().dropItem("Drop", item, count, player, null);
+    
+    if (drop != null) {
+        // Set drop location
+        drop.setDropTime(System.currentTimeMillis());
+        drop.setDropperObjectId(player.getObjectId());
+        drop.dropMe(player, player.getX(), player.getY(), player.getZ());
+        
+        // Set drop protection
+        drop.getDropProtection().protect(player);
+    }
+}
+
+// Pick up item
+public void pickupItem(Player player, Item item) {
+    // Check distance
+    if (!player.isInsideRadius3D(item, 150)) {
+        player.sendMessage("Too far away.");
+        return;
+    }
+    
+    // Check drop protection
+    if (!item.getDropProtection().tryPickup(player)) {
+        player.sendMessage("This item is protected.");
+        return;
+    }
+    
+    // Add to inventory
+    player.getInventory().addItem("Pickup", item, player, item);
+    item.pickupMe(player);
+}
+```
+
+### Item Grants with Skills
+
+```java
+// Check weapon skills
+public void checkWeaponSkills(Player player) {
+    Weapon weapon = player.getActiveWeaponItem();
+    if (weapon == null) {
+        return;
+    }
+    
+    // Get weapon enchant level
+    Item weaponItem = player.getActiveWeaponInstance();
+    if (weaponItem != null && weaponItem.getEnchantLevel() >= 4) {
+        SkillHolder skillHolder = weapon.getEnchant4Skill();
+        if (skillHolder != null) {
+            Skill skill = skillHolder.getSkill();
+            if (player.getSkillLevel(skill.getId()) <= 0) {
+                player.addSkill(skill, false);
+            }
+        }
+    }
+}
+```
+
+### Custom Item Handler
+
+```java
+public class CustomItemHandler implements IItemHandler {
+    @Override
+    public boolean useItem(Playable playable, Item item, boolean forceUse) {
+        if (!playable.isPlayer()) {
+            return false;
+        }
+        
+        Player player = playable.getActingPlayer();
+        
+        // Check item
+        if (item.getId() != CUSTOM_ITEM_ID) {
+            return false;
+        }
+        
+        // Check conditions
+        if (player.getLevel() < 40) {
+            player.sendMessage("You must be level 40 to use this.");
+            return false;
+        }
+        
+        // Consume item
+        if (!player.destroyItem("Consume", item, 1, player, true)) {
+            return false;
+        }
+        
+        // Apply effect
+        player.addExpAndSp(100000, 10000);
+        player.sendMessage("You gained experience!");
+        
+        return true;
+    }
+}
+```
+
+## Item Type Constants
+
+| Type | Value | Description |
+|------|-------|-------------|
+| `TYPE1_WEAPON_RING_EARRING_NECKLACE` | 0 | Weapons and accessories |
+| `TYPE1_SHIELD_ARMOR` | 1 | Shields and armor |
+| `TYPE1_ITEM_QUESTITEM_ADENA` | 4 | Items, quest items, currency |
+| `TYPE2_WEAPON` | 0 | Weapons |
+| `TYPE2_SHIELD_ARMOR` | 1 | Armor and shields |
+| `TYPE2_ACCESSORY` | 2 | Accessories |
+| `TYPE2_QUEST` | 3 | Quest items |
+| `TYPE2_MONEY` | 4 | Currency |
+
+## Related Classes
+
+<CardGroup cols={2}>
+  <Card title="PlayerInventory" icon="bag-shopping">
+    Player's main inventory management
+  </Card>
+  <Card title="Warehouse" icon="warehouse">
+    Warehouse storage system
+  </Card>
+  <Card title="ItemData" icon="database">
+    Item template data manager
+  </Card>
+  <Card title="DropProtection" icon="shield">
+    Drop protection system
+  </Card>
+</CardGroup>
+
+## Notes
+
+- Item templates are singleton instances shared across all item instances
+- Always use inventory methods for item operations (never modify directly)
+- Quest items cannot be dropped or traded by default
+- Enchant levels above +0 make items unique (cannot stack)
+- Shadow items have limited lifetime based on mana consumption

@@ -1,0 +1,547 @@
+---
+title: 'LoginServer Configuration'
+description: 'LoginServer setup, game server registration, authentication configuration, and startup procedures'
+---
+
+## Overview
+
+The LoginServer handles player authentication, account management, and maintains the list of available game servers. Players connect to the LoginServer first, authenticate, then are redirected to the selected GameServer.
+
+## Architecture
+
+```
+Player Client
+     |
+     v
+LoginServer (port 2106)
+     |
+     +-- Authenticates player
+     +-- Shows server list
+     +-- Redirects to GameServer
+     |
+     v
+GameServer (port 7777)
+```
+
+## Network Configuration
+
+Edit `login/config/Server.ini` to configure LoginServer networking:
+
+```ini
+# ---------------------------------------------------------------------------
+# Login Server Networking
+# ---------------------------------------------------------------------------
+
+# Client connection settings
+# Bind address for player client connections
+LoginserverHostname = 0.0.0.0
+LoginserverPort = 2106
+
+# GameServer connection settings
+# Where GameServers connect to register
+LoginHostname = 127.0.0.1
+LoginPort = 9014
+```
+
+<Note>
+  From `login/config/Server.ini:19-32`, these settings control both client and GameServer connections.
+</Note>
+
+### Port Configuration
+
+| Port | Protocol | Purpose | Configurable |
+|------|----------|---------|-------------|
+| **2106** | TCP | Player client authentication | Yes (`LoginserverPort`) |
+| **9014** | TCP | GameServer registration | Yes (`LoginPort`) |
+
+<Warning>
+  Ensure port **2106** is open in your firewall for incoming client connections.
+  
+  ```bash
+  # Linux firewall example
+  sudo ufw allow 2106/tcp
+  sudo ufw allow 9014/tcp
+  ```
+</Warning>
+
+## Security Configuration
+
+### Failed Login Protection
+
+Protect against brute-force attacks:
+
+```ini
+# ---------------------------------------------------------------------------
+# Security Settings
+# ---------------------------------------------------------------------------
+
+# Maximum failed login attempts before IP ban
+LoginTryBeforeBan = 5
+
+# Ban duration in seconds (900 = 15 minutes)
+LoginBlockAfterBan = 900
+```
+
+### Flood Protection
+
+Defend against connection flooding:
+
+```ini
+# Enable flood protection
+EnableFloodProtection = True
+
+# Fast connection limit (connections in FastConnectionTime)
+FastConnectionLimit = 15
+
+# Normal connection interval (milliseconds)
+NormalConnectionTime = 700
+
+# Fast connection interval (milliseconds)
+FastConnectionTime = 350
+
+# Maximum connections per IP address
+MaxConnectionPerIP = 50
+```
+
+<Info>
+  From `login/config/Server.ini:52-78`, these settings prevent connection exhaustion attacks.
+</Info>
+
+## Account Management
+
+### Auto Account Creation
+
+Allow automatic account creation on first login:
+
+```ini
+# ---------------------------------------------------------------------------
+# Account Settings
+# ---------------------------------------------------------------------------
+
+# Automatically create accounts when logging in
+# True = players can create accounts from client
+# False = accounts must be created manually
+AutoCreateAccounts = True
+
+# Display EULA/license after login
+ShowLicence = True
+```
+
+<Warning>
+  For public servers, consider setting `AutoCreateAccounts = False` and manually manage accounts for better security.
+</Warning>
+
+### Manual Account Creation
+
+If `AutoCreateAccounts = False`, create accounts manually:
+
+```sql
+-- Connect to database
+mysql -u l2jmobius -p l2jmobiusc4
+
+-- Create account
+INSERT INTO accounts (login, password, access_level, lastServer)
+VALUES ('username', SHA1('password'), 0, 1);
+
+-- Create GM account (access_level = 100)
+INSERT INTO accounts (login, password, access_level, lastServer)
+VALUES ('gmaccount', SHA1('gmpassword'), 100, 1);
+```
+
+Or use the AccountManager tool:
+
+```bash
+cd login
+./AccountManager.sh
+```
+
+## Game Server Registration
+
+GameServers must be registered with the LoginServer before they can accept players.
+
+<Steps>
+  <Step title="Enable GameServer Registration">
+    In `login/config/Server.ini`:
+
+    ```ini
+    # Allow new GameServers to register
+    # True = any server can register on free slots
+    # False = only pre-registered servers allowed
+    AcceptNewGameServer = True
+    ```
+  </Step>
+
+  <Step title="Register GameServer">
+    <Tabs>
+      <Tab title="Automatic Registration">
+        If `AcceptNewGameServer = True`, start the GameServer and it will automatically register.
+
+        ```bash
+        cd game
+        ./GameServer.sh
+        ```
+
+        The GameServer will:
+        1. Connect to LoginServer on port 9014
+        2. Request server ID (from `game/config/Server.ini:42`)
+        3. Receive hexid authentication key
+        4. Save to `game/config/hexid.txt`
+      </Tab>
+      <Tab title="Manual Registration">
+        Use the GameServerRegister utility:
+
+        ```bash
+        cd login
+        ./GameServerRegister.sh
+        ```
+
+        Follow the prompts:
+        1. Enter desired server ID (1-127)
+        2. Choose server name
+        3. Hexid is generated and saved
+        4. Copy `hexid.txt` to `game/config/`
+
+        <Info>
+          The registration tool reads from `login/config/Server.ini:28-32` for LoginServer connection details.
+        </Info>
+      </Tab>
+    </Tabs>
+  </Step>
+
+  <Step title="Verify Registration">
+    Check the database:
+
+    ```sql
+    USE l2jmobiusc4;
+    SELECT * FROM gameservers;
+    ```
+
+    You should see your registered GameServer with:
+    - `server_id`: Your server ID
+    - `hexid`: Authentication key
+    - `host`: GameServer IP binding
+  </Step>
+
+  <Step title="Configure GameServer">
+    Ensure `game/config/Server.ini` matches the registered server:
+
+    ```ini
+    # Must match registered server ID
+    RequestServerID = 1
+
+    # LoginServer connection (must match login/config/Server.ini)
+    LoginHost = 127.0.0.1
+    LoginPort = 9014
+    ```
+  </Step>
+</Steps>
+
+## Thread Configuration
+
+Optimize LoginServer thread pools in `login/config/Threads.ini`:
+
+```ini
+# ---------------------------------------------------------------------------
+# Thread Configuration
+# ---------------------------------------------------------------------------
+
+# Scheduled thread pool size
+# -1 = auto-configure based on CPU cores / 2
+ScheduledThreadPoolSize = 2
+
+# Instant thread pool size
+# -1 = auto-configure based on CPU cores / 2
+InstantThreadPoolSize = 2
+```
+
+<Note>
+  LoginServer requires fewer threads than GameServer since it only handles authentication, not game logic.
+</Note>
+
+## Startup Configuration
+
+### Starting the LoginServer
+
+<Tabs>
+  <Tab title="Linux">
+    ```bash
+    cd login
+    
+    # Make scripts executable (first time only)
+    chmod +x LoginServer.sh LoginServerTask.sh
+    
+    # Start server
+    ./LoginServer.sh
+    
+    # Or run in background
+    nohup ./LoginServer.sh &
+    
+    # View logs
+    tail -f log/stdout.log
+    ```
+
+    The `LoginServerTask.sh` at `login/LoginServerTask.sh:8` handles:
+    - Automatic restart on crash
+    - Log rotation
+    - JVM configuration from `java.cfg`
+  </Tab>
+  <Tab title="Windows">
+    ```cmd
+    cd login
+    LoginServer.bat
+    ```
+    
+    Or double-click `LoginServer.bat` in the `login/` folder.
+  </Tab>
+</Tabs>
+
+### JVM Configuration
+
+Edit `login/java.cfg` to adjust memory settings:
+
+```bash
+-server 
+-Dfile.encoding=UTF-8 
+-Dorg.slf4j.simpleLogger.log.com.zaxxer.hikari=warn 
+-XX:+UseZGC 
+-Xms128m     # Initial heap: 128MB
+-Xmx256m     # Maximum heap: 256MB
+```
+
+<Info>
+  LoginServer requires minimal memory compared to GameServer. Default settings (128-256MB) are sufficient for most servers.
+</Info>
+
+## Scheduled Restart
+
+Configure automatic LoginServer restarts:
+
+```ini
+# ---------------------------------------------------------------------------
+# Scheduled Login Restart
+# ---------------------------------------------------------------------------
+
+# Enable scheduled restart
+LoginRestartSchedule = False
+
+# Restart interval in hours
+LoginRestartTime = 24
+```
+
+<Note>
+  LoginServer restarts are typically coordinated with GameServer maintenance windows.
+</Note>
+
+## Health Checks
+
+Verify LoginServer is running correctly:
+
+### Check Server Process
+
+```bash
+# Linux - check if LoginServer is running
+ps aux | grep LoginServer
+
+# Check if ports are listening
+netstat -tlnp | grep 2106  # Client port
+netstat -tlnp | grep 9014  # GameServer port
+
+# Alternative using ss
+ss -tlnp | grep -E '(2106|9014)'
+```
+
+### Monitor Logs
+
+```bash
+# Real-time log monitoring
+tail -f login/log/stdout.log
+
+# Check for errors
+grep -i error login/log/*.log
+grep -i exception login/log/*.log
+
+# Check authentication attempts
+grep -i "login" login/log/stdout.log
+```
+
+### Test Connectivity
+
+```bash
+# Test client port
+telnet localhost 2106
+
+# Test GameServer registration port
+telnet localhost 9014
+
+# Using netcat
+nc -zv localhost 2106
+nc -zv localhost 9014
+```
+
+### Verify GameServer Connection
+
+Check if GameServer is connected:
+
+```bash
+# Check LoginServer logs for GameServer registration
+grep -i "gameserver" login/log/stdout.log
+
+# Verify in database
+mysql -u l2jmobius -p l2jmobiusc4 -e "SELECT server_id, host FROM gameservers;"
+```
+
+## Server List Configuration
+
+The LoginServer presents a list of available GameServers to authenticated players. Configuration is split between LoginServer and GameServer.
+
+### LoginServer Side
+
+In `login/config/Server.ini`:
+
+```ini
+# Accept new game servers on free slots
+AcceptNewGameServer = True
+```
+
+### GameServer Side
+
+In `game/config/Server.ini`:
+
+```ini
+# Server display settings
+ServerListType = Free        # Server type badge
+ServerListAge = 0            # Age restriction (0, 15, 18)
+ServerListBrackets = False   # Show [] before name
+ServerListClock = False      # Show clock icon
+
+# Server capacity
+MaximumOnlineUsers = 3500
+```
+
+## Configuration Files Summary
+
+Key configuration files in `login/config/`:
+
+| File | Purpose |
+|------|--------|
+| `Server.ini` | Core server settings, ports, security |
+| `Database.ini` | Database connection configuration |
+| `Threads.ini` | Thread pool settings |
+| `Interface.ini` | Interface configuration |
+
+## Troubleshooting
+
+### LoginServer Won't Start
+
+1. **Check Java version:**
+   ```bash
+   java -version
+   # Must be Java 25
+   ```
+
+2. **Verify database connection:**
+   ```bash
+   # Test connection
+   mysql -u l2jmobius -p l2jmobiusc4
+   
+   # Check tables exist
+   SHOW TABLES LIKE 'accounts';
+   SHOW TABLES LIKE 'gameservers';
+   ```
+
+3. **Check port availability:**
+   ```bash
+   # Ensure ports are not in use
+   netstat -tlnp | grep -E '(2106|9014)'
+   ```
+
+4. **Review logs:**
+   ```bash
+   cat login/log/stdout.log
+   ```
+
+### GameServer Can't Register
+
+**Error: "Connection refused" to LoginServer**
+
+1. Verify LoginServer is running:
+   ```bash
+   ps aux | grep LoginServer
+   ```
+
+2. Check LoginServer port is listening:
+   ```bash
+   netstat -tlnp | grep 9014
+   ```
+
+3. Verify `game/config/Server.ini` has correct LoginServer address:
+   ```ini
+   LoginHost = 127.0.0.1  # Use actual IP if not on same machine
+   LoginPort = 9014
+   ```
+
+4. Check `login/config/Server.ini` allows registration:
+   ```ini
+   AcceptNewGameServer = True
+   ```
+
+### Clients Can't Connect
+
+**Error: "Cannot connect to LoginServer"**
+
+1. **Check LoginServer is running:**
+   ```bash
+   netstat -tlnp | grep 2106
+   ```
+
+2. **Verify firewall allows port 2106:**
+   ```bash
+   sudo ufw status
+   sudo ufw allow 2106/tcp
+   ```
+
+3. **Check client configuration:**
+   - Ensure client is pointed to correct LoginServer IP
+   - Verify protocol version matches (`AllowedProtocolRevisions` in GameServer)
+
+### Failed Login Attempts
+
+**Error: "Account is banned" or "Invalid password"**
+
+1. **Check account in database:**
+   ```sql
+   SELECT login, access_level, lastactive FROM accounts WHERE login = 'username';
+   ```
+
+2. **Check IP ban:**
+   ```sql
+   -- Check for IP-based restrictions
+   SELECT * FROM accounts_ipauth;
+   ```
+
+3. **Reset ban counter:**
+   - Wait for `LoginBlockAfterBan` duration (default 15 minutes)
+   - Or restart LoginServer to clear temporary bans
+
+## Production Checklist
+
+Before going live:
+
+- [ ] Set `AutoCreateAccounts = False` for security
+- [ ] Configure proper `LoginTryBeforeBan` and flood protection
+- [ ] Enable `ShowLicence = True` with your server terms
+- [ ] Set `AcceptNewGameServer = False` after registration
+- [ ] Configure database backups
+- [ ] Set up monitoring for ports 2106 and 9014
+- [ ] Test authentication from external network
+- [ ] Verify GameServer registration and connectivity
+- [ ] Configure firewall rules
+- [ ] Set up log rotation
+
+## Next Steps
+
+With the LoginServer configured:
+
+1. [Configure the GameServer](/setup/game-server)
+2. [Review all configuration files](/setup/configuration)
+3. Test the complete authentication flow

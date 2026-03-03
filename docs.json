@@ -1,122 +1,108 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "L2J Mobius Chronicle 4",
+  "theme": "aspen",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#8B4513",
+    "light": "#D2691E",
+    "dark": "#654321"
   },
-  "favicon": "/favicon.svg",
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/fermanzolido/L2C4"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/fermanzolido/L2C4"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
+              "introduction",
               "quickstart",
-              "development"
+              "features"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Server Setup",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "setup/installation",
+              "setup/database",
+              "setup/game-server",
+              "setup/login-server",
+              "setup/configuration"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Game Systems",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "systems/olympiad",
+              "systems/seven-signs",
+              "systems/castle-siege",
+              "systems/clan-system",
+              "systems/raid-bosses",
+              "systems/dimensional-rift",
+              "systems/fishing"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Scripting",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "scripting/overview",
+              "scripting/quest-scripts",
+              "scripting/ai-scripts",
+              "scripting/handlers"
+            ]
+          },
+          {
+            "group": "Administration",
+            "pages": [
+              "admin/commands",
+              "admin/monitoring",
+              "admin/security",
+              "admin/troubleshooting"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "API Reference",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Core",
             "pages": [
-              "api-reference/introduction"
+              "api/game-server",
+              "api/network",
+              "api/database"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Game Models",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "api/player",
+              "api/npc",
+              "api/items",
+              "api/skills"
+            ]
+          },
+          {
+            "group": "Managers",
+            "pages": [
+              "api/managers/olympiad",
+              "api/managers/siege",
+              "api/managers/spawn"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

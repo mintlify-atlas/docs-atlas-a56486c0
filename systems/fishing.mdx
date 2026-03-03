@@ -1,0 +1,488 @@
+---
+title: 'Fishing System'
+description: 'Interactive fishing mechanics with combat, rewards, and fishing monsters'
+icon: 'fish'
+---
+
+## Overview
+
+The Fishing System is a non-combat activity that allows players to catch fish for crafting materials, consumables, and special rewards. The system features an interactive mini-game, fishing rod upgrades, lure types, and occasional **Fishing Monsters** that provide combat encounters.
+
+<Note>
+  Fishing requires specific equipment (rods and lures) and can only be performed in designated water zones throughout the game world.
+</Note>
+
+## Getting Started
+
+### Required Equipment
+
+1. **Fishing Rod**: Different grades provide better catch rates
+2. **Fishing Lure**: Consumed on each fishing attempt
+3. **Water Zone**: Must be near fishable water
+
+### Fishing Rods
+
+Managed by `FishingRodsData.java`:
+
+```java
+import org.l2jmobius.gameserver.data.xml.FishingRodsData;
+
+public class FishingRod {
+    private final int itemId;
+    private final int fishTimeMin;
+    private final int fishTimeMax;
+    private final int fishTimeRandom;
+    private final double damage;
+    // Additional properties
+}
+```
+
+**Rod Grades**:
+- **Novice Fishing Rod**: Entry-level, slow catch times
+- **Fishing Rod**: Standard rod for mid-level fishing
+- **Great Fishing Rod**: Fast catch times, better fish
+- **Ultra Fishing Rod**: Best rod, rare fish access
+
+### Fishing Lures
+
+Three tiers affecting fish quality:
+
+| Lure Type | Quality | Fish Grade | Cost |
+|-----------|---------|------------|------|
+| **Regular Lure** | Low | Common fish | Low |
+| **Good Lure** | Medium | Uncommon fish | Medium |
+| **Best Lure** | High | Rare fish | High |
+
+**Lure Consumption**:
+- 1 lure consumed per fishing attempt
+- Lost on failure or success
+- Better lures = better fish but higher cost
+
+## Fishing Process
+
+### Starting to Fish
+
+1. Equip fishing rod in weapon slot
+2. Have lures in inventory
+3. Stand near water zone
+4. Use fishing skill/command
+
+### Waiting Phase
+
+Random wait time based on rod quality:
+
+```java
+// FishingRod properties
+private final int fishTimeMin;      // Minimum wait (ms)
+private final int fishTimeMax;      // Maximum wait (ms)  
+private final int fishTimeRandom;   // Random variance
+
+// Actual wait time calculation
+int waitTime = fishTimeMin + Rnd.get(fishTimeRandom);
+```
+
+### Hook Phase
+
+When a fish bites:
+- **System Message**: "You've got a bite!"
+- **Sound Effect**: Fishing sound plays
+- **Combat UI**: Fishing combat interface appears
+
+**Source**: `Fishing.java:105-110`
+
+```java
+// Succeeded in getting a bite
+_fisher.sendPacket(SystemMessageId.SUCCEEDED_IN_GETTING_A_BITE);
+_fisher.broadcastPacket(new ExFishingStartCombat(
+    _fisher, _time, _fishMaxHp, _mode, lureType, _deceptiveMode
+));
+_fisher.sendPacket(new PlaySound(1, "SF_S_01", 0, 0, 0, 0, 0));
+```
+
+## Fishing Combat
+
+### Combat Mechanics
+
+Fishing transforms into a mini-game:
+
+```java
+public Fishing(Player fisher, Fish fish, boolean isNoob, boolean isUpperGrade) {
+    _fisher = fisher;
+    _fishMaxHp = fish.getFishHp();
+    _fishCurHp = _fishMaxHp;
+    _regenHp = fish.getHpRegen();
+    _fishId = fish.getItemId();
+    _time = fish.getCombatDuration();
+    _isUpperGrade = isUpperGrade;
+    
+    final int lureType;
+    if (isUpperGrade) {
+        _deceptiveMode = (Rnd.get(100) >= 90) ? 1 : 0;
+        lureType = 2;
+    } else {
+        _deceptiveMode = 0;
+        lureType = isNoob ? 0 : 1;
+    }
+    
+    _mode = (Rnd.get(100) >= 80) ? 1 : 0;
+}
+```
+
+**Source**: `Fishing.java:83-105`
+
+### Fish Properties
+
+- **Fish HP**: Total "health" of the fish
+- **HP Regeneration**: Fish recovers HP over time
+- **Combat Duration**: Time limit to catch the fish
+- **Mode**: Changes fish behavior (0 = normal, 1 = aggressive)
+- **Deceptive Mode**: Upper-grade fish can fake their behavior
+
+### Player Actions
+
+<AccordionGroup>
+  <Accordion title="Pumping" icon="gauge-high">
+    Reduces fish HP based on timing and rod quality. Use when mode indicator shows correct state.
+  </Accordion>
+
+  <Accordion title="Reeling" icon="rotate">
+    Primary damage action. More effective when timed correctly.
+    
+    ```java
+    public void useReeling(int dmg, int pen) {
+        _anim = 2;
+        if (Rnd.get(100) > 90) {
+            _fisher.sendPacket(SystemMessageId.FISH_HAS_RESISTED);
+            _goodUse = 0;
+            changeHp(0, pen);
+            return;
+        }
+        
+        // Process successful reeling
+    }
+    ```
+    
+    **Source**: `Fishing.java:236-250`
+  </Accordion>
+
+  <Accordion title="Pumping (Alternative)" icon="water">
+    Secondary damage action. Used in combination with reeling for optimal results.
+  </Accordion>
+</AccordionGroup>
+
+### Combat Resolution
+
+**Victory Conditions**:
+```java
+if (_fishCurHp == 0) {
+    doDie(true);  // Fish caught
+}
+```
+
+**Failure Conditions**:
+```java
+if (_fishCurHp >= (_fishMaxHp * 2)) {
+    // The fish got away
+    _fisher.sendPacket(SystemMessageId.THE_FISH_GOT_AWAY);
+    doDie(false);
+} else if (_time <= 0) {
+    // Time is up
+    _fisher.sendPacket(SystemMessageId.TIME_IS_UP_SO_THAT_FISH_GOT_AWAY);
+    doDie(false);
+}
+```
+
+**Source**: `Fishing.java:65-76`
+
+### HP Changes
+
+```java
+public void changeHp(int hp, int pen) {
+    _fishCurHp -= hp;
+    if (_fishCurHp < 0) {
+        _fishCurHp = 0;
+    }
+    
+    _fisher.broadcastPacket(new ExFishingHpRegen(
+        _fisher, _time, _fishCurHp, _mode, _goodUse, _anim, pen, _deceptiveMode
+    ));
+    _anim = 0;
+    
+    if (_fishCurHp > (_fishMaxHp * 2)) {
+        _fishCurHp = _fishMaxHp * 2;
+        doDie(false);
+    } else if (_fishCurHp == 0) {
+        doDie(true);
+    }
+}
+```
+
+**Source**: `Fishing.java:117-136`
+
+## Fishing Monsters
+
+Occasionally, players hook **Fishing Monsters** instead of fish:
+
+```java
+if (win) {
+    final FishingMonster fishingMonster = FishingMonstersData.getInstance()
+        .getFishingMonster(_fisher.getLevel());
+    if (fishingMonster != null) {
+        if (Rnd.get(100) <= fishingMonster.getProbability()) {
+            _fisher.sendPacket(SystemMessageId.YOU_HAVE_CAUGHT_A_MONSTER);
+            final Npc monster = Quest.addSpawn(
+                fishingMonster.getFishingMonsterId(), _fisher
+            );
+            monster.setTarget(_fisher);
+        } else {
+            _fisher.sendPacket(SystemMessageId.SUCCEEDED_IN_FISHING);
+            _fisher.addItem(ItemProcessType.PICKUP, _fishId, 1, null, true);
+        }
+    }
+}
+```
+
+**Source**: `Fishing.java:151-167`
+
+### Fishing Monster Properties
+
+```java
+public class FishingMonster {
+    private final int level;              // Player level range
+    private final int fishingMonsterId;   // NPC ID to spawn
+    private final int probability;        // % chance (0-100)
+}
+```
+
+**Mechanics**:
+- Spawn chance based on player level
+- Monster spawns near player position
+- Immediately aggros the fisher
+- Drops special loot on defeat
+
+**Managed by**: `FishingMonstersData.java`
+
+## Fish Types and Rewards
+
+### Common Fish
+
+- Used in cooking recipes
+- Sold to NPCs for Adena
+- Required for fishing-related quests
+
+### Uncommon Fish
+
+- Better cooking ingredients
+- Higher NPC sell value
+- Some quest requirements
+
+### Rare Fish
+
+- Premium cooking materials
+- Craft special consumables
+- High market value
+- Trophy items
+
+### Special Rewards
+
+- Treasure chests (rare)
+- Crafting materials
+- Enchant scrolls (very rare)
+- Event-specific items
+
+## AI Task System
+
+Fishing combat runs on a scheduled task:
+
+```java
+private Future<?> _fishAiTask;
+private boolean _thinking;
+
+if (_fishAiTask == null) {
+    _fishAiTask = ThreadPool.scheduleAtFixedRate(this, 1000, 1000);
+}
+
+protected void aiTask() {
+    if (_thinking) return;
+    
+    _thinking = true;
+    _time--;
+    
+    try {
+        if (_mode == 1) {
+            if (_deceptiveMode == 0) {
+                _fishCurHp += (int) _regenHp;
+            }
+        } else if (_deceptiveMode == 1) {
+            _fishCurHp += (int) _regenHp;
+        }
+        
+        if (_stop == 0) {
+            _stop = 1;
+            int check = Rnd.get(100);
+            if (check >= 70) {
+                _mode = _mode == 0 ? 1 : 0;
+            }
+            
+            if (_isUpperGrade) {
+                check = Rnd.get(100);
+                if (check >= 90) {
+                    _deceptiveMode = _deceptiveMode == 0 ? 1 : 0;
+                }
+            }
+        } else {
+            _stop--;
+        }
+    } finally {
+        _thinking = false;
+        // Send HP update packet
+    }
+}
+```
+
+**Source**: `Fishing.java:174-234`
+
+### Mode Changes
+
+- **70% chance** every second to switch modes
+- Upper-grade fish have **10% chance** to switch deceptive mode
+- Players must adapt to changing patterns
+
+## Fishing Zones
+
+Fishable areas are designated by zone type:
+- Rivers and lakes
+- Ocean coastlines
+- Special fishing spots (better rewards)
+- Event-specific fishing zones
+
+**Zone Check**:
+```java
+if (!player.isInWaterZone()) {
+    player.sendMessage("You must be near water to fish.");
+    return;
+}
+```
+
+## Skill System
+
+Fishing has associated skills:
+- **Fishing (Skill)**: Basic fishing ability
+- **Expert Fishing**: Enhanced catch rates
+- **Master Fishing**: Access to best fishing spots
+
+**Skill Levels**:
+- Level 1-10: Progressive improvements
+- Higher level = better fish, faster catches
+- Trained via NPC fishermen
+
+## Configuration
+
+### Fish Data
+
+Stored in XML or database:
+```xml
+<fish id="1" itemId="6900" level="1-5" hp="100" hpRegen="5" combatTime="30" />
+<fish id="2" itemId="6901" level="6-10" hp="150" hpRegen="8" combatTime="40" />
+```
+
+### Fishing Rod Data
+
+```xml
+<rod itemId="6519" fishTimeMin="5000" fishTimeMax="15000" 
+     fishTimeRandom="10000" damage="10" />
+```
+
+### Monster Data
+
+```xml
+<fishingMonster level="20" monsterId="18319" probability="5" />
+<fishingMonster level="40" monsterId="18320" probability="10" />
+```
+
+## Strategy Tips
+
+<AccordionGroup>
+  <Accordion title="Beginner Fishers" icon="seedling">
+    - Start with cheap lures to learn mechanics
+    - Practice timing in low-level zones
+    - Upgrade rod before spending on expensive lures
+  </Accordion>
+
+  <Accordion title="Advanced Fishers" icon="star">
+    - Use best lures only with best rod
+    - Learn mode patterns to maximize damage
+    - Fish in special zones during events for bonuses
+  </Accordion>
+
+  <Accordion title="Profit Fishing" icon="coins">
+    - Focus on fish types in high demand
+    - Sell rare fish on player market
+    - Complete fishing quests for reputation
+  </Accordion>
+
+  <Accordion title="Monster Hunting" icon="crosshairs">
+    - Come prepared for combat
+    - Higher level = better monster drops
+    - Party members can help with monster kills
+  </Accordion>
+</AccordionGroup>
+
+## Terminating Fishing
+
+```java
+public synchronized void doDie(boolean win) {
+    if (_fishAiTask != null) {
+        _fishAiTask.cancel(false);
+        _fishAiTask = null;
+    }
+    
+    if (_fisher == null) return;
+    
+    if (win) {
+        // Award fish or spawn monster
+    }
+    
+    _fisher.endFishing(win);
+    _fisher = null;
+}
+```
+
+**Source**: `Fishing.java:138-172`
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can I fish while in a party?" icon="users">
+    Yes, but each player fishes independently. Party members can help kill fishing monsters.
+  </Accordion>
+
+  <Accordion title="Do I lose my rod if I fail?" icon="trash">
+    No, rods are permanent. Only lures are consumed.
+  </Accordion>
+
+  <Accordion title="Can I fish in PvP zones?" icon="swords">
+    Yes, but you're vulnerable to attack. Fishing is interrupted if you enter combat.
+  </Accordion>
+
+  <Accordion title="What's the best way to level fishing skill?" icon="arrow-up">
+    Consistent practice. Fish quantity matters more than quality for skill advancement.
+  </Accordion>
+
+  <Accordion title="Are fishing monsters difficult?" icon="dragon">
+    They scale to your level. Come prepared with potions and be ready to fight.
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Clan System](/systems/clan-system) - Some clans organize fishing events
+- [Seven Signs](/systems/seven-signs) - Special fishing opportunities during events
+
+## References
+
+- `Fishing.java` - Core fishing combat system
+- `FishingRodsData.java` - Rod configurations
+- `FishingMonstersData.java` - Monster spawn data
+- `FishingRod.java` - Rod data structure
+- `FishingMonster.java` - Monster data structure

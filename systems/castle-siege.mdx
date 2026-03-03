@@ -1,0 +1,400 @@
+---
+title: 'Castle Siege'
+description: 'Large-scale PvP warfare system for castle ownership and territory control'
+icon: 'castle'
+---
+
+## Overview
+
+Castle Sieges are massive clan warfare events where attackers attempt to conquer castles owned by defending clans. Successful sieges grant the conquering clan ownership of the castle, along with economic benefits, taxes, and territorial control.
+
+<Note>
+  Castle Sieges are scheduled events requiring strategic planning, alliance coordination, and large-scale PvP combat. Only clans level 4+ can participate.
+</Note>
+
+## Siege Mechanics
+
+### Participation Requirements
+
+**Defending Clan**:
+- Must own the castle
+- Can register as defender automatically
+- May have ally clans assist
+
+**Attacking Clans**:
+- Minimum clan level: **4** (configurable)
+- Register during siege registration window
+- Maximum registrations: **500 clans** (configurable)
+- No active castle ownership
+
+**Source**: `SiegeManager.java:61-138`
+
+```java
+private int _siegeClanMinLevel = 4;
+private int _attackerMaxClans = 500;
+private int _defenderMaxClans = 500;
+```
+
+### Siege Duration
+
+Default siege length: **120 minutes** (2 hours)
+
+```java
+private int _siegeLength = 120; // Minutes
+```
+
+Configurable in `config/Siege.ini`:
+```ini
+SiegeLength = 120
+```
+
+## Siege Phases
+
+### 1. Registration Phase
+
+Occurs **2 weeks** before siege (configurable via `SiegeCycle`):
+- Attacking clans register
+- Defenders prepare defenses
+- Mercenary hiring window
+
+### 2. Preparation Phase
+
+- Deploy siege weapons
+- Position clan members
+- Activate castle defenses
+- Buff and supply troops
+
+### 3. Battle Phase
+
+**Objectives**:
+- **Attackers**: Destroy castle gate, defeat defenders, claim throne
+- **Defenders**: Protect gate and throne room, eliminate attackers
+
+**Victory Conditions**:
+- Attacker wins: Clan leader sits on throne for required duration
+- Defender wins: Survive until siege timer expires
+
+### 4. Resolution Phase
+
+- System determines winner
+- Castle ownership transferred (if attackers won)
+- Rewards distributed
+- Cooldown period begins
+
+## Defensive Structures
+
+### Control Towers
+
+Castles have multiple **Control Towers** that provide defensive bonuses:
+
+```java
+private final Map<Integer, List<TowerSpawn>> _controlTowers = new HashMap<>();
+
+for (int i = 1; i < 0xFF; i++) {
+    final String configKey = castle.getName() + "ControlTower" + i;
+    if (!siegeConfig.containsKey(configKey)) break;
+    
+    final StringTokenizer st = new StringTokenizer(siegeConfig.getString(configKey, ""), ",");
+    final int x = Integer.parseInt(st.nextToken());
+    final int y = Integer.parseInt(st.nextToken());
+    final int z = Integer.parseInt(st.nextToken());
+    final int npcId = Integer.parseInt(st.nextToken());
+    
+    controlTowers.add(new TowerSpawn(npcId, new Location(x, y, z)));
+}
+```
+
+**Source**: `SiegeManager.java:142-165`
+
+**Effects**:
+- Enhanced defender stats
+- Area buffs/debuffs
+- Must be destroyed by attackers
+
+### Flame Towers
+
+Fire-based defensive structures:
+
+```java
+private final Map<Integer, List<TowerSpawn>> _flameTowers = new HashMap<>();
+```
+
+**Properties**:
+- Deal periodic damage to attackers
+- Control specific zones
+- Can be temporarily disabled
+
+**Source**: `SiegeManager.java:167-196`
+
+### Castle Gates
+
+Primary defensive barrier:
+- High HP (castle-specific)
+- Vulnerable to siege weapons
+- Must be destroyed for throne access
+
+## Siege Skills
+
+Participants gain special **Siege Skills**:
+
+```java
+public void addSiegeSkills(Player character) {
+    for (Skill sk : SkillData.getInstance().getSiegeSkills(
+        character.isNoble(), 
+        character.getClan().getCastleId() > 0
+    )) {
+        character.addSkill(sk, false);
+    }
+}
+```
+
+**Source**: `SiegeManager.java:70-76`
+
+**Skill Categories**:
+- **Attacker Skills**: Siege weapon operation, battering ram
+- **Defender Skills**: Castle defense buffs, repair abilities
+- **Noble Skills**: Enhanced siege capabilities for nobles
+
+### Skill Removal
+
+Skills are removed post-siege:
+
+```java
+public void removeSiegeSkills(Player character) {
+    for (Skill sk : SkillData.getInstance().getSiegeSkills(
+        character.isNoble(), 
+        character.getClan().getCastleId() > 0
+    )) {
+        character.removeSkill(sk);
+    }
+}
+```
+
+**Source**: `SiegeManager.java:118-124`
+
+## Siege Weapons
+
+<AccordionGroup>
+  <Accordion title="Battering Ram" icon="hammer">
+    - Destroys castle gates
+    - Requires multiple operators
+    - Vulnerable to defender attacks
+  </Accordion>
+
+  <Accordion title="Siege Golem" icon="robot">
+    - Summonable combat unit
+    - High HP and damage
+    - Limited duration
+  </Accordion>
+
+  <Accordion title="Ballista" icon="crosshairs">
+    - Long-range siege weapon
+    - Targets towers and gates
+    - Requires positioning and aiming
+  </Accordion>
+
+  <Accordion title="Catapult" icon="meteor">
+    - Area damage weapon
+    - Targets grouped enemies
+    - Slow reload time
+  </Accordion>
+</AccordionGroup>
+
+## Registration System
+
+### Check Registration Status
+
+```java
+public boolean checkIsRegistered(Clan clan, int castleid) {
+    if (clan == null) return false;
+    
+    // Castle owners are auto-registered as defenders
+    if (clan.getCastleId() > 0) return true;
+    
+    boolean register = false;
+    try (Connection con = DatabaseFactory.getConnection();
+        PreparedStatement ps = con.prepareStatement(
+            "SELECT clan_id FROM siege_clans WHERE clan_id=? AND castle_id=?"
+        )
+    ) {
+        ps.setInt(1, clan.getId());
+        ps.setInt(2, castleid);
+        try (ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                register = true;
+                break;
+            }
+        }
+    }
+    
+    return register;
+}
+```
+
+**Source**: `SiegeManager.java:83-116`
+
+## Mercenary System
+
+Castles can hire **NPC Mercenaries** for defense:
+
+```java
+MercTicketManager.MERCS_MAX_PER_CASTLE[castle.getResidenceId() - 1] = 
+    siegeConfig.getInt(
+        castle.getName() + "MaxMercenaries", 
+        MercTicketManager.MERCS_MAX_PER_CASTLE[castle.getResidenceId() - 1]
+    );
+```
+
+**Source**: `SiegeManager.java:200`
+
+**Properties**:
+- Maximum count per castle (configurable)
+- Hired via special tickets
+- Spawn at defensive positions
+- Basic combat AI
+
+## Rewards and Benefits
+
+### Castle Ownership Benefits
+
+<AccordionGroup>
+  <Accordion title="Tax Collection" icon="coins">
+    - Collect taxes from castle territory
+    - Revenue from shops in castle town
+    - Weekly treasury income
+  </Accordion>
+
+  <Accordion title="Clan Reputation" icon="star">
+    - Significant reputation points for conquest
+    - Bonus reputation for successful defenses
+    - Prestige among server community
+  </Accordion>
+
+  <Accordion title="Special Privileges" icon="key">
+    - Access to castle warehouse
+    - Teleportation privileges
+    - Exclusive crafting NPCs
+  </Accordion>
+
+  <Accordion title="Blood Alliance Rewards" icon="droplet">
+    Defenders receive Blood Alliance items:
+    ```java
+    private int _bloodAllianceReward = 0;
+    ```
+    Configurable via `BloodAllianceReward` setting.
+  </Accordion>
+</AccordionGroup>
+
+### Participant Rewards
+
+- **Winners**: Fame points, special items
+- **Active Participants**: Contribution-based rewards
+- **Defenders (if successful)**: Blood Alliance items
+
+## Configuration
+
+### Siege.ini Settings
+
+```ini
+# Siege Cycle (weeks between sieges)
+SiegeCycle = 2
+
+# Participation Limits
+AttackerMaxClans = 500
+DefenderMaxClans = 500
+SiegeClanMinLevel = 4
+
+# Siege Duration
+SiegeLength = 120  # Minutes
+
+# Respawn Settings
+AttackerRespawn = 0  # Milliseconds delay
+
+# Rewards
+BloodAllianceReward = 1  # Item count
+
+# Flags
+MaxFlags = 1  # Max headquarters flags per clan
+```
+
+### Castle-Specific Configuration
+
+Each castle can have unique tower configurations:
+
+```ini
+# Control Towers (format: x,y,z,npcId)
+GludioControlTower1 = -18120,109656,-2488,13002
+GludioControlTower2 = -18120,110856,-2488,13002
+
+# Flame Towers (format: x,y,z,npcId,zoneId1,zoneId2,...)
+GludioFlameTower1 = -18120,109656,-2488,13003,12001,12002
+```
+
+## Siege Schedule
+
+### Schedule Database
+
+Sieges are scheduled via `siege_schedule_data`:
+
+```java
+import org.l2jmobius.gameserver.data.xml.SiegeScheduleData;
+```
+
+**Properties**:
+- Castle ID
+- Scheduled date/time
+- Recurrence pattern
+- Registration deadlines
+
+## Strategy Tips
+
+<Warning>
+  Proper coordination and strategy are essential for siege success. Lack of planning often results in chaotic battles favoring defenders.
+</Warning>
+
+### For Attackers
+
+1. **Destroy Control Towers First**: Weakens defender bonuses
+2. **Coordinate Siege Weapons**: Focus fire on gates
+3. **Protect Headquarters**: Prevent defender counter-attacks
+4. **Rush Throne Room**: After gate falls, speed is crucial
+
+### For Defenders
+
+1. **Use Territory Advantage**: Position on castle walls
+2. **Repair Gates**: Keep barriers intact as long as possible
+3. **Target Siege Weapons**: Eliminate attacker advantages
+4. **Defend Throne**: Final stand location
+
+## FAQ
+
+<AccordionGroup>
+  <Accordion title="Can alliances participate together?" icon="handshake">
+    Yes, allied clans can register as attackers or defenders (if allied with owner). However, each clan registers separately.
+  </Accordion>
+
+  <Accordion title="What happens to castle items after conquest?" icon="box">
+    The castle warehouse transfers to the new owning clan. Previous owner loses access.
+  </Accordion>
+
+  <Accordion title="Can players from non-registered clans participate?" icon="user-slash">
+    No, only members of registered clans can enter the siege zone during battle.
+  </Accordion>
+
+  <Accordion title="How does respawning work during siege?" icon="rotate">
+    Attackers respawn at headquarters with configurable delay. Defenders respawn at castle spawn points.
+  </Accordion>
+</AccordionGroup>
+
+## Related Systems
+
+- [Clan System](/systems/clan-system) - Clan requirements and benefits
+- [Seven Signs](/systems/seven-signs) - Seal of Strife affects sieges
+- [Raid Bosses](/systems/raid-bosses) - Castle territory raid spawns
+
+## References
+
+- `SiegeManager.java` - Core siege system management
+- `Siege.java` - Individual siege instance
+- `SiegeScheduleData.java` - Schedule management
+- `config/Siege.ini` - Configuration file
